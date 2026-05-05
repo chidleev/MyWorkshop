@@ -21,7 +21,7 @@ const menuItems: MenuItem[] = [
     label: "Мои заказы",
     routeName: "orders",
     icon: "heroicons:clipboard-document-list",
-    roles: ["Менеджер", "Руководитель"],
+    roles: ["Менеджер"],
   },
   {
     label: "Сменные задания",

@@ -6,7 +6,20 @@ import prettierConfig from "eslint-config-prettier";
 
 export default [
   {
-    ignores: ["dist/**", "node_modules/**"],
+    ignores: ["**/dist/**", "**/node_modules/**"],
+  },
+  {
+    languageOptions: {
+      globals: {
+        window: "readonly",
+        document: "readonly",
+        localStorage: "readonly",
+        navigator: "readonly",
+        Event: "readonly",
+        HTMLInputElement: "readonly",
+        setTimeout: "readonly",
+      },
+    },
   },
   js.configs.recommended,
   ...tseslint.configs.recommended,
