@@ -36,6 +36,12 @@ const menuItems: MenuItem[] = [
     roles: ["Кладовщик", "Закупщик", "Руководитель"],
   },
   {
+    label: "Мои выезды",
+    routeName: "installer-deployments",
+    icon: "heroicons:truck",
+    roles: ["Монтажник"],
+  },
+  {
     label: "Загрузка цеха",
     routeName: "analytics",
     icon: "heroicons:chart-bar-square",

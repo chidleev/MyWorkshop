@@ -13,6 +13,10 @@ async function handleLogin() {
     await router.push({ name: "workshop-tasks" });
     return;
   }
+  if (selectedRole.value === "Монтажник") {
+    await router.push({ name: "installer-deployments" });
+    return;
+  }
 
   await router.push("/");
 }

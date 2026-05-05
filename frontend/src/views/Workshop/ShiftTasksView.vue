@@ -1,21 +1,14 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
-
-type ProgressStatus = "new" | "in_progress" | "done";
-
-interface ShiftTask {
-  id: number;
-  order_number: string;
-  operation_name: string;
-  progress_status: ProgressStatus;
-  due_time: string;
-}
+import ShiftTaskCard from "../../components/Workshop/ShiftTaskCard.vue";
+import type { ProgressStatus, ShiftTask } from "../../types/workshop";
 
 const activeFilter = ref<ProgressStatus>("new");
 
 const tasks = ref<ShiftTask[]>([
   {
     id: 1,
+    order_id: 1,
     order_number: "MM-2026-001",
     operation_name: "Распил ДСП",
     progress_status: "new",
@@ -23,6 +16,7 @@ const tasks = ref<ShiftTask[]>([
   },
   {
     id: 2,
+    order_id: 7,
     order_number: "MM-2026-007",
     operation_name: "Кромление",
     progress_status: "in_progress",
@@ -30,6 +24,7 @@ const tasks = ref<ShiftTask[]>([
   },
   {
     id: 3,
+    order_id: 4,
     order_number: "MM-2026-004",
     operation_name: "Сборка",
     progress_status: "done",
@@ -46,6 +41,12 @@ const tabs: Array<{ key: ProgressStatus; label: string }> = [
 const filteredTasks = computed(() =>
   tasks.value.filter((task) => task.progress_status === activeFilter.value)
 );
+
+function updateTaskStatus(payload: { taskId: number; status: ProgressStatus }) {
+  tasks.value = tasks.value.map((task) =>
+    task.id === payload.taskId ? { ...task, progress_status: payload.status } : task
+  );
+}
 </script>
 
 <template>
@@ -73,29 +74,12 @@ const filteredTasks = computed(() =>
     </div>
 
     <div class="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-      <article
+      <ShiftTaskCard
         v-for="task in filteredTasks"
         :key="task.id"
-        class="rounded-xl border border-slate-300 bg-white p-5 shadow-sm"
-      >
-        <p class="text-sm text-slate-500">Заказ</p>
-        <p class="text-xl font-bold text-slate-900">{{ task.order_number }}</p>
-        <p class="mt-3 text-sm text-slate-500">Операция</p>
-        <p class="text-lg font-semibold text-slate-900">{{ task.operation_name }}</p>
-        <div class="mt-4 flex items-center justify-between">
-          <span
-            class="rounded-full px-3 py-1 text-sm font-medium"
-            :class="{
-              'bg-blue-100 text-blue-700': task.progress_status === 'new',
-              'bg-amber-100 text-amber-700': task.progress_status === 'in_progress',
-              'bg-green-100 text-green-700': task.progress_status === 'done',
-            }"
-          >
-            {{ task.progress_status === "new" ? "Новая" : task.progress_status === "in_progress" ? "В работе" : "Завершена" }}
-          </span>
-          <span class="text-sm font-medium text-slate-600">до {{ task.due_time }}</span>
-        </div>
-      </article>
+        :task="task"
+        @update-status="updateTaskStatus"
+      />
     </div>
   </section>
 </template>
