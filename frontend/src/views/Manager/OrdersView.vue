@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
+import { useRouter } from "vue-router";
 import OrderFormModal from "../../components/Orders/OrderFormModal.vue";
 import type { Order, OrderFormPayload, OrderStatus } from "../../types/order";
 
@@ -18,6 +19,7 @@ const columns: KanbanColumn[] = [
 
 const isLoading = ref(true);
 const orders = ref<Order[]>([]);
+const router = useRouter();
 
 const isModalOpen = ref(false);
 const modalMode = ref<"create" | "edit">("create");
@@ -151,6 +153,10 @@ function openEditModal(order: Order) {
   isModalOpen.value = true;
 }
 
+async function openOrderDetail(orderId: number) {
+  await router.push({ name: "order-detail", params: { id: orderId } });
+}
+
 function closeModal() {
   isModalOpen.value = false;
 }
@@ -281,6 +287,13 @@ onMounted(() => {
             <p class="mt-1 text-xs text-slate-600">Сумма: {{ formatCurrency(order.total_cost) }}</p>
 
             <div class="mt-3 flex gap-2">
+              <button
+                type="button"
+                class="rounded-md border border-primary px-2 py-1 text-xs text-primary hover:bg-blue-50"
+                @click="openOrderDetail(order.id)"
+              >
+                Детали
+              </button>
               <button
                 type="button"
                 class="rounded-md border border-slate-300 px-2 py-1 text-xs text-slate-700 hover:bg-slate-100"

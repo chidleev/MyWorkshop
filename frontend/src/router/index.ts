@@ -5,7 +5,8 @@ import HomeView from "../views/HomeView.vue";
 import LoginView from "../views/Auth/LoginView.vue";
 import { useAuthStore, type UserRole } from "../stores/auth";
 import OrdersView from "../views/Manager/OrdersView.vue";
-import TasksView from "../views/TasksView.vue";
+import OrderDetailView from "../views/Manager/OrderDetailView.vue";
+import ShiftTasksView from "../views/Workshop/ShiftTasksView.vue";
 import WarehouseView from "../views/WarehouseView.vue";
 import AnalyticsView from "../views/AnalyticsView.vue";
 
@@ -41,9 +42,16 @@ const router = createRouter({
           meta: { allowedRoles: ["Менеджер"] satisfies UserRole[] },
         },
         {
-          path: "tasks",
-          name: "tasks",
-          component: TasksView,
+          path: "orders/:id",
+          name: "order-detail",
+          component: OrderDetailView,
+          meta: { allowedRoles: ["Менеджер"] satisfies UserRole[] },
+        },
+        {
+          path: "workshop/tasks",
+          name: "workshop-tasks",
+          component: ShiftTasksView,
+          meta: { allowedRoles: ["Мастер цеха"] satisfies UserRole[] },
         },
         {
           path: "warehouse",
@@ -75,6 +83,9 @@ router.beforeEach((to) => {
   }
 
   if (to.name === "login" && hasToken) {
+    if (currentRole === "Мастер цеха") {
+      return { name: "workshop-tasks" };
+    }
     return { name: "home" };
   }
 

@@ -9,6 +9,11 @@ const selectedRole = ref<UserRole>(USER_ROLES[0]);
 
 async function handleLogin() {
   authStore.login(selectedRole.value);
+  if (selectedRole.value === "Мастер цеха") {
+    await router.push({ name: "workshop-tasks" });
+    return;
+  }
+
   await router.push("/");
 }
 </script>

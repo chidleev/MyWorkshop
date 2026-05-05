@@ -25,9 +25,9 @@ const menuItems: MenuItem[] = [
   },
   {
     label: "Сменные задания",
-    routeName: "tasks",
+    routeName: "workshop-tasks",
     icon: "heroicons:wrench-screwdriver",
-    roles: ["Мастер цеха", "Монтажник", "Руководитель"],
+    roles: ["Мастер цеха"],
   },
   {
     label: "Склад",
