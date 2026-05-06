@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref } from "vue";
+import { showError, showSuccess } from "../../utils/notification";
 
 export interface SpecificationItem {
   article: string;
@@ -37,6 +38,7 @@ function processFile(file: File) {
 
   if (!isCsv(file)) {
     errorMessage.value = "HTTP 400 Bad Request: Некорректный формат файла.";
+    showError("Некорректный формат файла. Убедитесь, что загружаете правильный CSV.");
     return;
   }
 
@@ -78,6 +80,7 @@ function processFile(file: File) {
 
     isUploading.value = false;
     successMessage.value = "Спецификация успешно загружена и обработана.";
+    showSuccess("Спецификация успешно загружена и обработана.");
     emit("upload-success", { items: mockItems, totalCost: total, filename: file.name });
   }, 1200);
 }

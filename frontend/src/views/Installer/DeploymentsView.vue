@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { useRouter } from "vue-router";
-import { mockDeployments } from "../../mocks/deployments";
+import { useInstallerStore } from "../../stores/installer";
 
 const router = useRouter();
-const deployments = computed(() => mockDeployments);
+const installerStore = useInstallerStore();
+const deployments = computed(() => installerStore.deployments);
 
 async function openDeployment(id: number) {
   await router.push({ name: "installer-deployment-detail", params: { id } });

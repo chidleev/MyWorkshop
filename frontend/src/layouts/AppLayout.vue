@@ -30,10 +30,22 @@ const menuItems: MenuItem[] = [
     roles: ["Мастер цеха"],
   },
   {
-    label: "Склад",
-    routeName: "warehouse",
+    label: "Остатки склада",
+    routeName: "storekeeper-inventory",
     icon: "heroicons:archive-box",
-    roles: ["Кладовщик", "Закупщик", "Руководитель"],
+    roles: ["Кладовщик"],
+  },
+  {
+    label: "Транзакции склада",
+    routeName: "storekeeper-transactions",
+    icon: "heroicons:arrows-right-left",
+    roles: ["Кладовщик"],
+  },
+  {
+    label: "Дефицит материалов",
+    routeName: "buyer-deficit",
+    icon: "heroicons:exclamation-triangle",
+    roles: ["Закупщик"],
   },
   {
     label: "Мои выезды",
@@ -42,9 +54,21 @@ const menuItems: MenuItem[] = [
     roles: ["Монтажник"],
   },
   {
-    label: "Загрузка цеха",
-    routeName: "analytics",
+    label: "Мониторинг сделок",
+    routeName: "director-monitoring",
+    icon: "heroicons:rectangle-stack",
+    roles: ["Руководитель"],
+  },
+  {
+    label: "Загрузка линий",
+    routeName: "director-workload",
     icon: "heroicons:chart-bar-square",
+    roles: ["Руководитель"],
+  },
+  {
+    label: "Рентабельность",
+    routeName: "director-profitability",
+    icon: "heroicons:banknotes",
     roles: ["Руководитель"],
   },
 ];
@@ -67,7 +91,9 @@ async function handleLogout() {
 
 <template>
   <div class="min-h-screen bg-slate-100 text-slate-900">
-    <header class="flex items-center justify-between border-b border-slate-200 bg-white px-4 py-3 sm:px-6">
+    <header
+      class="flex items-center justify-between border-b border-slate-200 bg-white px-4 py-3 sm:px-6"
+    >
       <div class="flex items-center gap-2">
         <button
           type="button"
@@ -78,9 +104,22 @@ async function handleLogout() {
         </button>
         <strong>Моя Мастерская</strong>
       </div>
-      <div class="text-right">
-        <p class="text-sm font-medium text-slate-900">{{ authStore.userInfo?.fullName ?? "Сотрудник" }}</p>
-        <p class="text-xs text-slate-500">{{ authStore.userRole ?? "Роль не выбрана" }}</p>
+      <div class="flex items-center gap-2">
+        <div class="text-right">
+          <p class="text-sm font-medium text-slate-900">
+            {{ authStore.userInfo?.fullName ?? "Сотрудник" }}
+          </p>
+          <p class="text-xs text-slate-500">{{ authStore.userRole ?? "Роль не выбрана" }}</p>
+        </div>
+        <button
+          type="button"
+          class="inline-flex h-10 w-10 items-center justify-center rounded-md border border-danger text-danger hover:bg-red-50"
+          title="Выйти"
+          aria-label="Выйти из аккаунта"
+          @click="handleLogout"
+        >
+          <Icon icon="heroicons:arrow-left-on-rectangle" class="h-5 w-5" />
+        </button>
       </div>
     </header>
 
@@ -104,14 +143,6 @@ async function handleLogout() {
             <span>{{ item.label }}</span>
           </RouterLink>
         </nav>
-
-        <button
-          type="button"
-          class="mt-4 w-full rounded-md border border-danger px-3 py-2 text-sm font-medium text-danger hover:bg-red-50"
-          @click="handleLogout"
-        >
-          Выйти
-        </button>
       </aside>
 
       <main class="min-w-0 flex-1">

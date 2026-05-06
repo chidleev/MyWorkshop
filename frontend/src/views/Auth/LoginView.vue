@@ -9,6 +9,10 @@ const selectedRole = ref<UserRole>(USER_ROLES[0]);
 
 async function handleLogin() {
   authStore.login(selectedRole.value);
+  if (selectedRole.value === "Менеджер") {
+    await router.push({ name: "orders" });
+    return;
+  }
   if (selectedRole.value === "Мастер цеха") {
     await router.push({ name: "workshop-tasks" });
     return;
@@ -17,8 +21,20 @@ async function handleLogin() {
     await router.push({ name: "installer-deployments" });
     return;
   }
+  if (selectedRole.value === "Кладовщик") {
+    await router.push({ name: "storekeeper-inventory" });
+    return;
+  }
+  if (selectedRole.value === "Закупщик") {
+    await router.push({ name: "buyer-deficit" });
+    return;
+  }
+  if (selectedRole.value === "Руководитель") {
+    await router.push({ name: "director-monitoring" });
+    return;
+  }
 
-  await router.push("/");
+  await router.push({ name: "home" });
 }
 </script>
 

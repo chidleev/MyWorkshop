@@ -1,19 +1,29 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { mockDeployments } from "../../mocks/deployments";
+import PhotoReportUploader from "../../components/Installer/PhotoReportUploader.vue";
+import { useInstallerStore } from "../../stores/installer";
+import { showSuccess } from "../../utils/notification";
 
 const route = useRoute();
 const router = useRouter();
 const selectedImage = ref<string | null>(null);
+const installerStore = useInstallerStore();
 
 const deploymentId = computed(() => Number(route.params.id));
 const deployment = computed(() =>
-  mockDeployments.find((item) => item.id === deploymentId.value)
+  installerStore.deployments.find((item) => item.id === deploymentId.value)
 );
 
 async function goBack() {
   await router.push({ name: "installer-deployments" });
+}
+
+async function completeWithPhoto() {
+  installerStore.completeDeployment(deploymentId.value);
+  showSuccess("Объект успешно сдан!");
+  await new Promise((resolve) => setTimeout(resolve, 700));
+  await goBack();
 }
 </script>
 
@@ -53,6 +63,8 @@ async function goBack() {
       </div>
     </article>
 
+    <PhotoReportUploader @submit-photo="completeWithPhoto" />
+
     <div
       v-if="selectedImage"
       class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/80 p-4"
@@ -69,6 +81,7 @@ async function goBack() {
         <img :src="selectedImage" alt="Увеличенный рендер" class="max-h-[85vh] rounded-lg object-contain" />
       </div>
     </div>
+
   </section>
 
   <section v-else class="rounded-xl border border-slate-200 bg-white p-4 text-sm text-slate-600 shadow-sm">

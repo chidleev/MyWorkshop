@@ -247,22 +247,22 @@ onMounted(() => {
       Загрузка заказов...
     </div>
 
-    <div v-else class="grid grid-cols-1 gap-4 xl:grid-cols-5">
+    <div v-else class="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-5">
       <article
         v-for="column in columnOrders"
         :key="column.status"
-        class="rounded-xl border border-slate-200 bg-white p-3 shadow-sm"
+        class="flex min-h-[360px] flex-col rounded-xl border border-slate-200 bg-white p-3 shadow-sm"
       >
         <header class="mb-3 flex items-center justify-between">
           <h2 class="text-sm font-semibold text-slate-900">{{ column.title }}</h2>
           <span class="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600">{{ column.orders.length }}</span>
         </header>
 
-        <div class="space-y-3">
+        <div class="space-y-3 overflow-y-auto pr-1">
           <div
             v-for="order in column.orders"
             :key="order.id"
-            class="rounded-lg border p-3"
+            class="rounded-lg border p-3 shadow-sm"
             :class="{
               'border-danger bg-red-50': isOverdue(order),
               'border-warning bg-amber-50': !isOverdue(order) && isNearDeadline(order),
@@ -286,7 +286,7 @@ onMounted(() => {
             <p class="mt-1 text-xs text-slate-600">Сдать до: {{ order.target_date }}</p>
             <p class="mt-1 text-xs text-slate-600">Сумма: {{ formatCurrency(order.total_cost) }}</p>
 
-            <div class="mt-3 flex gap-2">
+            <div class="mt-3 flex flex-wrap gap-2">
               <button
                 type="button"
                 class="rounded-md border border-primary px-2 py-1 text-xs text-primary hover:bg-blue-50"

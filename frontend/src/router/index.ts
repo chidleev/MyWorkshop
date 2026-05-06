@@ -9,8 +9,12 @@ import OrderDetailView from "../views/Manager/OrderDetailView.vue";
 import ShiftTasksView from "../views/Workshop/ShiftTasksView.vue";
 import DeploymentsView from "../views/Installer/DeploymentsView.vue";
 import DeploymentDetailView from "../views/Installer/DeploymentDetailView.vue";
-import WarehouseView from "../views/WarehouseView.vue";
-import AnalyticsView from "../views/AnalyticsView.vue";
+import InventoryView from "../views/Storekeeper/InventoryView.vue";
+import TransactionsView from "../views/Storekeeper/TransactionsView.vue";
+import DeficitReportView from "../views/Buyer/DeficitReportView.vue";
+import GlobalMonitoringView from "../views/Director/GlobalMonitoringView.vue";
+import WorkloadDashboardView from "../views/Director/WorkloadDashboardView.vue";
+import ProfitabilityReportView from "../views/Director/ProfitabilityReportView.vue";
 
 const router = createRouter({
   history: createWebHistory(),
@@ -68,14 +72,40 @@ const router = createRouter({
           meta: { allowedRoles: ["Монтажник"] satisfies UserRole[] },
         },
         {
-          path: "warehouse",
-          name: "warehouse",
-          component: WarehouseView,
+          path: "storekeeper/inventory",
+          name: "storekeeper-inventory",
+          component: InventoryView,
+          meta: { allowedRoles: ["Кладовщик"] satisfies UserRole[] },
         },
         {
-          path: "analytics",
-          name: "analytics",
-          component: AnalyticsView,
+          path: "storekeeper/transactions",
+          name: "storekeeper-transactions",
+          component: TransactionsView,
+          meta: { allowedRoles: ["Кладовщик"] satisfies UserRole[] },
+        },
+        {
+          path: "buyer/deficit",
+          name: "buyer-deficit",
+          component: DeficitReportView,
+          meta: { allowedRoles: ["Закупщик"] satisfies UserRole[] },
+        },
+        {
+          path: "director/monitoring",
+          name: "director-monitoring",
+          component: GlobalMonitoringView,
+          meta: { allowedRoles: ["Руководитель"] satisfies UserRole[] },
+        },
+        {
+          path: "director/workload",
+          name: "director-workload",
+          component: WorkloadDashboardView,
+          meta: { allowedRoles: ["Руководитель"] satisfies UserRole[] },
+        },
+        {
+          path: "director/profitability",
+          name: "director-profitability",
+          component: ProfitabilityReportView,
+          meta: { allowedRoles: ["Руководитель"] satisfies UserRole[] },
         },
       ],
     },
@@ -97,11 +127,23 @@ router.beforeEach((to) => {
   }
 
   if (to.name === "login" && hasToken) {
+    if (currentRole === "Менеджер") {
+      return { name: "orders" };
+    }
     if (currentRole === "Мастер цеха") {
       return { name: "workshop-tasks" };
     }
     if (currentRole === "Монтажник") {
       return { name: "installer-deployments" };
+    }
+    if (currentRole === "Кладовщик") {
+      return { name: "storekeeper-inventory" };
+    }
+    if (currentRole === "Закупщик") {
+      return { name: "buyer-deficit" };
+    }
+    if (currentRole === "Руководитель") {
+      return { name: "director-monitoring" };
     }
     return { name: "home" };
   }
