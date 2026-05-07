@@ -1,6 +1,7 @@
 import { createRouter, createWebHistory } from "vue-router";
 import AppLayout from "../layouts/AppLayout.vue";
 import AuthLayout from "../layouts/AuthLayout.vue";
+import LeadCaptureWidget from "../components/Client/LeadCaptureWidget.vue";
 import HomeView from "../views/HomeView.vue";
 import LoginView from "../views/Auth/LoginView.vue";
 import { useAuthStore, type UserRole } from "../stores/auth";
@@ -28,6 +29,18 @@ const router = createRouter({
           path: "",
           name: "login",
           component: LoginView,
+        },
+      ],
+    },
+    {
+      path: "/feedback-widget",
+      component: AuthLayout,
+      meta: { requiresAuth: false },
+      children: [
+        {
+          path: "",
+          name: "feedback-widget-demo",
+          component: LeadCaptureWidget,
         },
       ],
     },
@@ -118,8 +131,9 @@ router.beforeEach((to) => {
   const roleFromStorage = localStorage.getItem("auth.role") as UserRole | null;
   const hasToken = authStore.isAuthenticated || Boolean(tokenFromStorage);
   const requiresAuth = to.matched.some((route) => route.meta.requiresAuth);
-  const allowedRoles = to.matched
-    .flatMap((route) => (route.meta.allowedRoles as UserRole[] | undefined) ?? []);
+  const allowedRoles = to.matched.flatMap(
+    (route) => (route.meta.allowedRoles as UserRole[] | undefined) ?? []
+  );
   const currentRole = authStore.userRole ?? roleFromStorage;
 
   if (requiresAuth && !hasToken) {

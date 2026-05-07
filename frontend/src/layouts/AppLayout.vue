@@ -1,13 +1,20 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
 import { Icon } from "@iconify/vue";
-import { useRouter } from "vue-router";
+import { useRoute, useRouter } from "vue-router";
 import { useAuthStore } from "../stores/auth";
 import type { UserRole } from "../stores/auth";
+import OrderFormModal from "../components/Orders/OrderFormModal.vue";
+import { useManagerOrdersStore } from "../stores/managerOrders";
+import type { OrderFormPayload, OrderStatus } from "../types/order";
 
 const authStore = useAuthStore();
 const router = useRouter();
+const route = useRoute();
 const sidebarOpen = ref(false);
+const ordersStore = useManagerOrdersStore();
+ordersStore.ensureLoaded();
+const isSidebarEditOpen = ref(false);
 
 interface MenuItem {
   label: string;
@@ -82,6 +89,50 @@ const visibleMenuItems = computed(() => {
   return menuItems.filter((item) => item.roles.includes(role));
 });
 
+const isManagerOrderDetail = computed(() => authStore.userRole === "Менеджер" && route.name === "order-detail");
+const currentOrderId = computed(() => Number(route.params.id));
+const currentOrder = computed(() => {
+  if (!isManagerOrderDetail.value || !Number.isFinite(currentOrderId.value)) {
+    return null;
+  }
+  return ordersStore.findById(currentOrderId.value);
+});
+
+const statusButtons: Array<{ key: OrderStatus; label: string }> = [
+  { key: "new", label: "В обработке" },
+  { key: "cutting", label: "Распил" },
+  { key: "edging", label: "Кромление" },
+  { key: "assembly", label: "Сборка" },
+  { key: "ready_to_ship", label: "Готов к отгрузке" }
+];
+
+function isCurrentStatus(status: OrderStatus) {
+  return currentOrder.value?.status === status;
+}
+
+function setStatus(status: OrderStatus) {
+  if (!currentOrder.value) {
+    return;
+  }
+  ordersStore.updateOrderStatus(currentOrder.value.id, status);
+}
+
+async function deleteCurrentOrder() {
+  if (!currentOrder.value) {
+    return;
+  }
+  ordersStore.deleteOrder(currentOrder.value.id);
+  await router.push({ name: "orders" });
+}
+
+function updateCurrentOrder(payload: OrderFormPayload) {
+  if (!currentOrder.value) {
+    return;
+  }
+  ordersStore.updateOrder(currentOrder.value.id, payload);
+  isSidebarEditOpen.value = false;
+}
+
 async function handleLogout() {
   authStore.logout();
   sidebarOpen.value = false;
@@ -92,7 +143,7 @@ async function handleLogout() {
 <template>
   <div class="min-h-screen bg-slate-100 text-slate-900">
     <header
-      class="flex items-center justify-between border-b border-slate-200 bg-white px-4 py-3 sm:px-6"
+      class="relative z-20 flex items-center justify-between border-b border-slate-200 bg-white px-4 py-3 sm:px-6"
     >
       <div class="flex items-center gap-2">
         <button
@@ -123,11 +174,18 @@ async function handleLogout() {
       </div>
     </header>
 
-    <div class="mx-auto flex max-w-7xl gap-4 p-4 sm:p-6">
+    <div class="relative mx-auto flex max-w-7xl gap-4 p-4 sm:p-6">
+      <!-- Overlay for mobile -->
+      <div
+        v-if="sidebarOpen"
+        class="fixed inset-0 z-10 bg-slate-900/20 md:hidden"
+        @click="sidebarOpen = false"
+      ></div>
+
       <aside
         :class="[
-          'w-72 shrink-0 rounded-xl border border-slate-200 bg-white p-3 shadow-sm md:block',
-          sidebarOpen ? 'block' : 'hidden',
+          'w-72 shrink-0 rounded-xl border border-slate-200 bg-white p-3 shadow-sm md:relative md:block md:z-auto',
+          sidebarOpen ? 'absolute z-20 block' : 'hidden',
         ]"
       >
         <nav class="space-y-1">
@@ -143,11 +201,59 @@ async function handleLogout() {
             <span>{{ item.label }}</span>
           </RouterLink>
         </nav>
+
+        <section v-if="isManagerOrderDetail && currentOrder" class="mt-4 rounded-lg border border-slate-200 p-3">
+          <h3 class="text-sm font-semibold text-slate-900">Управление заказом</h3>
+          <p class="mt-1 text-xs text-slate-500">Заказ {{ currentOrder.agreement_number }}</p>
+
+          <div class="mt-3 space-y-2">
+            <p class="text-xs font-medium uppercase tracking-wide text-slate-500">Смена статуса</p>
+            <div class="grid grid-cols-1 gap-2">
+              <button
+                v-for="item in statusButtons"
+                :key="item.key"
+                type="button"
+                class="rounded-md border px-3 py-2 text-left text-sm"
+                :class="isCurrentStatus(item.key) ? 'border-primary bg-primary/10 font-medium text-primary' : 'border-slate-300 hover:bg-slate-100'"
+                :disabled="isCurrentStatus(item.key)"
+                @click="setStatus(item.key)"
+              >
+                {{ item.label }}
+              </button>
+            </div>
+          </div>
+
+          <div class="mt-3 flex flex-col gap-2">
+            <button
+              type="button"
+              class="w-full rounded-md border border-primary px-3 py-2 text-sm font-medium text-primary hover:bg-blue-50"
+              @click="isSidebarEditOpen = true"
+            >
+              Редактировать заказ
+            </button>
+            <button
+              type="button"
+              class="w-full rounded-md border border-danger px-3 py-2 text-sm font-medium text-danger hover:bg-red-50"
+              @click="deleteCurrentOrder"
+            >
+              Удалить заказ
+            </button>
+          </div>
+        </section>
       </aside>
 
       <main class="min-w-0 flex-1">
         <RouterView />
       </main>
     </div>
+
+    <OrderFormModal
+      v-if="currentOrder"
+      :is-open="isSidebarEditOpen"
+      mode="edit"
+      :initial-data="currentOrder"
+      @close="isSidebarEditOpen = false"
+      @submit="updateCurrentOrder"
+    />
   </div>
 </template>

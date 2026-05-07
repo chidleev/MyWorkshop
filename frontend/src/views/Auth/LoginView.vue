@@ -41,7 +41,9 @@ async function handleLogin() {
 <template>
   <section class="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
     <h1 class="text-2xl font-semibold text-slate-900">Вход в систему</h1>
-    <p class="mt-2 text-sm text-slate-600">Выберите роль для локальной авторизации через mock CRM.</p>
+    <p class="mt-2 text-sm text-slate-600">
+      Выберите роль для локальной авторизации через mock CRM.
+    </p>
 
     <label class="mt-5 block text-sm font-medium text-slate-700" for="role">Роль сотрудника</label>
     <select
@@ -61,5 +63,14 @@ async function handleLogin() {
     >
       Войти
     </button>
+
+    <a
+      href="/feedback-widget"
+      target="_blank"
+      rel="noopener noreferrer"
+      class="mt-4 block text-center text-sm font-medium text-primary hover:text-blue-700 hover:underline"
+    >
+      Открыть страницу с виджетом формы обратной связи
+    </a>
   </section>
 </template>

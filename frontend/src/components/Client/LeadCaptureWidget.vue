@@ -10,18 +10,61 @@ const isSuccess = ref(false);
 const phonePattern = /^\+7\s\(\d{3}\)\s\d{3}-\d{2}-\d{2}$/;
 const isFormValid = computed(() => name.value.trim().length > 0 && phonePattern.test(phone.value));
 
+function extractPhoneDigits(raw: string) {
+  return raw.replace(/\D/g, "").replace(/^8/, "7").slice(0, 11);
+}
+
 function formatPhoneInput(raw: string) {
-  const digits = raw.replace(/\D/g, "").replace(/^8/, "7").slice(0, 11);
-  const normalized = digits.startsWith("7") ? digits : `7${digits}`;
-  const padded = normalized.padEnd(11, "_");
-  return `+${padded[0]} (${padded.slice(1, 4)}) ${padded.slice(4, 7)}-${padded.slice(7, 9)}-${padded.slice(9, 11)}`
-    .replace(/_/g, "")
-    .trim();
+  const digits = extractPhoneDigits(raw);
+  if (!digits.length) {
+    return "";
+  }
+
+  const normalized = digits.startsWith("7") ? digits : `7${digits}`.slice(0, 11);
+  const country = normalized.slice(0, 1);
+  const code = normalized.slice(1, 4);
+  const first = normalized.slice(4, 7);
+  const second = normalized.slice(7, 9);
+  const third = normalized.slice(9, 11);
+
+  let result = `+${country}`;
+  if (code) {
+    result += ` (${code}`;
+    if (code.length === 3) {
+      result += ")";
+    }
+  }
+  if (first) {
+    result += ` ${first}`;
+  }
+  if (second) {
+    result += `-${second}`;
+  }
+  if (third) {
+    result += `-${third}`;
+  }
+  return result;
 }
 
 function handlePhoneInput(event: Event) {
   const target = event.target as HTMLInputElement;
-  phone.value = formatPhoneInput(target.value);
+  const nativeInput = event as InputEvent;
+  const previousDigits = extractPhoneDigits(phone.value);
+  let nextDigits = extractPhoneDigits(target.value);
+
+  // When deleting near formatting chars (")", "-", space), browsers may remove
+  // only a separator. In that case we remove one digit manually.
+  if (
+    nativeInput.inputType?.startsWith("delete") &&
+    nextDigits === previousDigits &&
+    previousDigits.length > 1
+  ) {
+    nextDigits = previousDigits.slice(0, -1);
+  }
+
+  const formatted = formatPhoneInput(nextDigits);
+  phone.value = formatted;
+  target.value = formatted;
 }
 
 async function submitLead() {
@@ -54,6 +97,8 @@ async function submitLead() {
         :value="phone"
         type="tel"
         placeholder="+7 (___) ___-__-__"
+        inputmode="tel"
+        maxlength="18"
         class="mt-1 w-full rounded-md border-slate-300 text-sm focus:border-primary focus:ring-primary"
         @input="handlePhoneInput"
       />

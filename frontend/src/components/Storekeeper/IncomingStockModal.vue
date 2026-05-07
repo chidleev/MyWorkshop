@@ -45,8 +45,9 @@ function submit() {
 </script>
 
 <template>
-  <div v-if="isOpen" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4">
-    <section class="w-full max-w-lg rounded-xl bg-white p-5 shadow-xl">
+  <Teleport to="body">
+    <div v-if="isOpen" class="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/60 p-4">
+      <section class="w-full max-w-lg rounded-xl bg-white p-5 shadow-xl">
       <h3 class="text-lg font-semibold text-slate-900">Оформить приход</h3>
 
       <label class="mt-4 block text-sm font-medium text-slate-700">Номенклатура</label>
@@ -92,6 +93,7 @@ function submit() {
           Сохранить
         </button>
       </div>
-    </section>
-  </div>
+      </section>
+    </div>
+  </Teleport>
 </template>

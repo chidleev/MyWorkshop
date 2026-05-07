@@ -59,10 +59,12 @@ watch(
   { immediate: true }
 );
 
+const PHONE_PATTERN = /^\+7 \(\d{3}\) \d{3}-\d{2}-\d{2}$/;
+
 const errors = computed(() => {
   return {
     full_name: form.full_name.trim() ? "" : "Укажите ФИО клиента",
-    phone: form.phone.trim().length >= 18 ? "" : "Введите телефон полностью",
+    phone: PHONE_PATTERN.test(form.phone.trim()) ? "" : "Введите телефон в формате +7 (999) 999-99-99",
     agreement_number: form.agreement_number.trim() ? "" : "Укажите номер договора",
     target_date:
       form.target_date && form.target_date >= today ? "" : "Дата сдачи не может быть в прошлом",
@@ -72,8 +74,17 @@ const errors = computed(() => {
 const isValid = computed(() => Object.values(errors.value).every((value) => !value));
 
 function normalizePhone(value: string) {
-  const digits = value.replace(/\D/g, "").slice(0, 11);
-  const normalized = digits.startsWith("8") ? `7${digits.slice(1)}` : digits;
+  const digits = value.replace(/\D/g, "");
+  if (digits.length === 0) {
+    return "";
+  }
+
+  const local = digits.startsWith("8")
+    ? `7${digits.slice(1)}`
+    : digits.startsWith("7")
+      ? digits
+      : `7${digits}`;
+  const normalized = local.slice(0, 11);
 
   let result = "+7";
   if (normalized.length > 1) {
@@ -89,7 +100,7 @@ function normalizePhone(value: string) {
     result += `-${normalized.slice(9, 11)}`;
   }
 
-  return result;
+  return result.trim();
 }
 
 function handlePhoneInput(event: Event) {
@@ -121,8 +132,9 @@ function handleSubmit() {
 </script>
 
 <template>
-  <div v-if="isOpen" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4">
-    <section class="w-full max-w-2xl rounded-xl bg-white p-5 shadow-xl sm:p-6">
+  <Teleport to="body">
+    <div v-if="isOpen" class="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/60 p-4">
+      <section class="w-full max-w-2xl rounded-xl bg-white p-5 shadow-xl sm:p-6">
       <header class="mb-4 flex items-start justify-between gap-4">
         <div>
           <h2 class="text-lg font-semibold text-slate-900">
@@ -197,6 +209,7 @@ function handleSubmit() {
           </button>
         </div>
       </form>
-    </section>
-  </div>
+      </section>
+    </div>
+  </Teleport>
 </template>
