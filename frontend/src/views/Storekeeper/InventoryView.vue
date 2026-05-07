@@ -1,35 +1,71 @@
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed, onMounted, ref } from "vue";
+import { fetchInventory, registerIncomingStock, type InventoryItem } from "../../api/inventory";
 import IncomingStockModal from "../../components/Storekeeper/IncomingStockModal.vue";
-import { useWorkshopDataStore } from "../../stores/workshopData";
-import { showSuccess } from "../../utils/notification";
+import { showError, showSuccess } from "../../utils/notification";
+import {
+  isServerAvailable,
+  isServerUnavailableError,
+  SERVER_UNAVAILABLE_MESSAGE,
+  withRequestTimeout,
+} from "../../utils/serverHealth";
 
-const workshopStore = useWorkshopDataStore();
 const search = ref("");
 const isIncomingModalOpen = ref(false);
+const materials = ref<InventoryItem[]>([]);
+const isLoading = ref(false);
+const loadError = ref("");
 
 const filteredMaterials = computed(() => {
   const query = search.value.trim().toLowerCase();
   if (!query) {
-    return workshopStore.materials;
+    return materials.value;
   }
-  return workshopStore.materials.filter(
+  return materials.value.filter(
     (item) => item.article.toLowerCase().includes(query) || item.name.toLowerCase().includes(query)
   );
 });
 
-function formatStock(value: number, unit: string) {
-  if (unit === "шт") {
-    return `${Math.round(value)} ${unit}`;
-  }
-  return `${value.toFixed(3)} ${unit}`;
+function formatStock(value: string | number) {
+  return Number(value).toFixed(3);
 }
 
-function onIncomingSubmit(payload: { article: string; quantity: number }) {
-  workshopStore.addIncomingStock(payload.article, payload.quantity);
-  isIncomingModalOpen.value = false;
-  showSuccess("Остатки успешно пополнены");
+async function loadInventory() {
+  isLoading.value = true;
+  loadError.value = "";
+  if (!(await isServerAvailable())) {
+    materials.value = [];
+    loadError.value = SERVER_UNAVAILABLE_MESSAGE;
+    isLoading.value = false;
+    return;
+  }
+  try {
+    const response = await withRequestTimeout(fetchInventory());
+    materials.value = response?.data || [];
+  } catch (error) {
+    materials.value = [];
+    loadError.value = isServerUnavailableError(error)
+      ? SERVER_UNAVAILABLE_MESSAGE
+      : "Не удалось загрузить остатки со склада.";
+  } finally {
+    isLoading.value = false;
+  }
 }
+
+async function onIncomingSubmit(payload: { materialId: number; quantity: number }) {
+  try {
+    await registerIncomingStock(payload.materialId, payload.quantity);
+    await loadInventory();
+    isIncomingModalOpen.value = false;
+    showSuccess("Остатки успешно пополнены");
+  } catch {
+    showError("Не удалось зарегистрировать приход. Проверьте доступность сервера.");
+  }
+}
+
+onMounted(() => {
+  void loadInventory();
+});
 </script>
 
 <template>
@@ -56,7 +92,17 @@ function onIncomingSubmit(payload: { article: string; quantity: number }) {
         class="w-full rounded-md border-slate-300 text-sm focus:border-primary focus:ring-primary"
       />
 
-      <div class="mt-4 overflow-x-auto">
+      <div v-if="isLoading" class="mt-4 text-sm text-slate-500">Загрузка остатков...</div>
+      <div v-else-if="loadError" class="mt-4 rounded-md border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+        {{ loadError }}
+      </div>
+      <div
+        v-else-if="filteredMaterials.length === 0"
+        class="mt-4 rounded-md border border-dashed border-slate-300 p-4 text-sm text-slate-500"
+      >
+        Нет данных по остаткам для отображения.
+      </div>
+      <div v-else class="mt-4 overflow-x-auto">
         <table class="min-w-full text-sm">
           <thead class="bg-slate-100 text-slate-700">
             <tr>
@@ -70,12 +116,12 @@ function onIncomingSubmit(payload: { article: string; quantity: number }) {
               v-for="item in filteredMaterials"
               :key="item.article"
               class="border-b border-slate-200 last:border-0"
-              :class="{ 'bg-red-50': item.current_stock <= 0 }"
+              :class="{ 'bg-red-50': Number(item.current_stock) <= 0 }"
             >
               <td class="px-3 py-2 font-medium">{{ item.article }}</td>
               <td class="px-3 py-2">{{ item.name }}</td>
-              <td class="px-3 py-2 text-right" :class="{ 'text-danger font-semibold': item.current_stock <= 0 }">
-                {{ formatStock(item.current_stock, item.unit) }}
+              <td class="px-3 py-2 text-right" :class="{ 'text-danger font-semibold': Number(item.current_stock) <= 0 }">
+                {{ formatStock(item.current_stock) }}
               </td>
             </tr>
           </tbody>
@@ -85,7 +131,7 @@ function onIncomingSubmit(payload: { article: string; quantity: number }) {
 
     <IncomingStockModal
       :is-open="isIncomingModalOpen"
-      :materials="workshopStore.materials"
+      :materials="materials"
       @close="isIncomingModalOpen = false"
       @submit="onIncomingSubmit"
     />

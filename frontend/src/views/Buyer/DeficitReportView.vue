@@ -1,22 +1,25 @@
 <script setup lang="ts">
-import { computed } from "vue";
-import { useWorkshopDataStore } from "../../stores/workshopData";
+import { computed, onMounted, ref } from "vue";
+import { fetchDeficitReport, type DeficitItem } from "../../api/inventory";
 import { showSuccess, showWarning } from "../../utils/notification";
+import { isServerAvailable, SERVER_UNAVAILABLE_MESSAGE } from "../../utils/serverHealth";
 
-const workshopStore = useWorkshopDataStore();
+const rows = ref<DeficitItem[]>([]);
+const isLoading = ref(false);
+const loadError = ref("");
 
-const rows = computed(() =>
-  workshopStore.deficitMaterials.map((item) => {
-    const required = Math.abs(item.current_stock);
+const enrichedRows = computed(() =>
+  rows.value.map((item) => {
+    const required = Math.abs(Number(item.current_stock));
     return {
       ...item,
       required,
-      budget: required * item.base_cost,
+      budget: Number(item.total_deficit_cost ?? required * Number(item.base_cost)),
     };
   })
 );
 
-const totalBudget = computed(() => rows.value.reduce((sum, row) => sum + row.budget, 0));
+const totalBudget = computed(() => enrichedRows.value.reduce((sum, row) => sum + row.budget, 0));
 
 function formatCurrency(value: number) {
   return new Intl.NumberFormat("ru-RU", {
@@ -27,19 +30,39 @@ function formatCurrency(value: number) {
   }).format(value);
 }
 
+async function loadDeficitReport() {
+  isLoading.value = true;
+  loadError.value = "";
+  if (!(await isServerAvailable())) {
+    rows.value = [];
+    loadError.value = SERVER_UNAVAILABLE_MESSAGE;
+    isLoading.value = false;
+    return;
+  }
+  try {
+    const response = await fetchDeficitReport();
+    rows.value = response.data;
+  } catch {
+    rows.value = [];
+    loadError.value = "Не удалось загрузить отчет о дефиците.";
+  } finally {
+    isLoading.value = false;
+  }
+}
+
 function exportRequest() {
-  if (rows.value.length === 0) {
+  if (enrichedRows.value.length === 0) {
     showWarning("Нет дефицитных позиций для формирования заявки.");
     return;
   }
 
   const csvRows = [
     ["Артикул", "Наименование", "К закупке", "Цена закупки", "Сумма"],
-    ...rows.value.map((row) => [
+    ...enrichedRows.value.map((row) => [
       row.article,
       row.name,
       row.required.toFixed(3),
-      row.base_cost.toFixed(2),
+      Number(row.base_cost).toFixed(2),
       row.budget.toFixed(2),
     ]),
   ];
@@ -55,6 +78,10 @@ function exportRequest() {
   window.URL.revokeObjectURL(url);
   showSuccess("Заявка сформирована. Файл отчета загружен.");
 }
+
+onMounted(() => {
+  void loadDeficitReport();
+});
 </script>
 
 <template>
@@ -72,7 +99,14 @@ function exportRequest() {
         <p class="text-lg font-bold text-slate-900">{{ formatCurrency(totalBudget) }}</p>
       </div>
 
-      <div class="overflow-x-auto">
+      <div v-if="isLoading" class="rounded-md bg-slate-50 p-6 text-sm text-slate-500">Загрузка отчета...</div>
+      <div v-else-if="loadError" class="rounded-md border border-red-200 bg-red-50 p-6 text-sm text-red-700">
+        {{ loadError }}
+      </div>
+      <div v-else-if="enrichedRows.length === 0" class="rounded-md border border-green-200 bg-green-50 p-6 text-sm text-green-700">
+        Все материалы в наличии. Дефицита нет!
+      </div>
+      <div v-else class="overflow-x-auto">
         <table class="min-w-full text-sm">
           <thead class="bg-slate-100 text-slate-700">
             <tr>
@@ -85,14 +119,14 @@ function exportRequest() {
           </thead>
           <tbody>
             <tr
-              v-for="row in rows"
+              v-for="row in enrichedRows"
               :key="row.article"
               class="border-b border-slate-200 last:border-0"
             >
               <td class="px-3 py-2 font-medium">{{ row.article }}</td>
               <td class="px-3 py-2">{{ row.name }}</td>
               <td class="px-3 py-2 text-right text-danger">{{ row.required.toFixed(3) }}</td>
-              <td class="px-3 py-2 text-right">{{ formatCurrency(row.base_cost) }}</td>
+              <td class="px-3 py-2 text-right">{{ formatCurrency(Number(row.base_cost)) }}</td>
               <td class="px-3 py-2 text-right font-semibold">{{ formatCurrency(row.budget) }}</td>
             </tr>
           </tbody>

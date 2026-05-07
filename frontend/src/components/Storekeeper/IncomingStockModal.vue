@@ -1,25 +1,25 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
-import type { MaterialItem } from "../../stores/workshopData";
+import type { InventoryItem } from "../../api/inventory";
 
 const props = defineProps<{
   isOpen: boolean;
-  materials: MaterialItem[];
+  materials: InventoryItem[];
 }>();
 
 const emit = defineEmits<{
   (event: "close"): void;
-  (event: "submit", payload: { article: string; quantity: number }): void;
+  (event: "submit", payload: { materialId: number; quantity: number }): void;
 }>();
 
-const selectedArticle = ref("");
+const selectedMaterialId = ref<number | null>(null);
 const quantity = ref("");
 
 const normalizedQuantity = computed(() => quantity.value.replace(",", ".").trim());
 const quantityNumber = computed(() => Number.parseFloat(normalizedQuantity.value));
 const isValid = computed(() => {
   return (
-    Boolean(selectedArticle.value) &&
+    selectedMaterialId.value !== null &&
     normalizedQuantity.value.length > 0 &&
     Number.isFinite(quantityNumber.value) &&
     quantityNumber.value > 0
@@ -30,7 +30,7 @@ watch(
   () => props.isOpen,
   (isOpen) => {
     if (isOpen) {
-      selectedArticle.value = props.materials[0]?.article ?? "";
+      selectedMaterialId.value = props.materials[0]?.id ?? null;
       quantity.value = "";
     }
   }
@@ -40,7 +40,7 @@ function submit() {
   if (!isValid.value) {
     return;
   }
-  emit("submit", { article: selectedArticle.value, quantity: quantityNumber.value });
+  emit("submit", { materialId: selectedMaterialId.value as number, quantity: quantityNumber.value });
 }
 </script>
 
@@ -52,11 +52,11 @@ function submit() {
 
       <label class="mt-4 block text-sm font-medium text-slate-700">Номенклатура</label>
       <select
-        v-model="selectedArticle"
+        v-model.number="selectedMaterialId"
         class="mt-1 w-full rounded-md border-slate-300 text-sm focus:border-primary focus:ring-primary"
       >
         <option value="" disabled>Выберите материал</option>
-        <option v-for="item in materials" :key="item.article" :value="item.article">
+        <option v-for="item in materials" :key="item.id" :value="item.id">
           {{ item.article }} — {{ item.name }}
         </option>
       </select>

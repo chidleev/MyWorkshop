@@ -4,6 +4,8 @@ import { useRouter } from "vue-router";
 import OrderFormModal from "../../components/Orders/OrderFormModal.vue";
 import type { Order, OrderFormPayload, OrderStatus } from "../../types/order";
 import { useManagerOrdersStore } from "../../stores/managerOrders";
+import { showError } from "../../utils/notification";
+import { isServerAvailable, SERVER_UNAVAILABLE_MESSAGE } from "../../utils/serverHealth";
 
 interface KanbanColumn {
   status: OrderStatus;
@@ -19,6 +21,7 @@ const columns: KanbanColumn[] = [
 ];
 
 const isLoading = ref(true);
+const loadError = ref("");
 const router = useRouter();
 const ordersStore = useManagerOrdersStore();
 const orders = ordersStore.orders;
@@ -109,9 +112,19 @@ const fullColumnOrders = computed(() => {
 
 async function loadOrders() {
   isLoading.value = true;
-  await new Promise((resolve) => setTimeout(resolve, 400));
-  ordersStore.ensureLoaded();
-  isLoading.value = false;
+  loadError.value = "";
+  if (!(await isServerAvailable())) {
+    loadError.value = SERVER_UNAVAILABLE_MESSAGE;
+    isLoading.value = false;
+    return;
+  }
+  try {
+    await ordersStore.ensureLoaded(true);
+  } catch {
+    loadError.value = "Не удалось загрузить заказы. Проверьте подключение к серверу.";
+  } finally {
+    isLoading.value = false;
+  }
 }
 
 function openCreateModal() {
@@ -146,20 +159,23 @@ function closeColumnList() {
   selectedColumnStatus.value = null;
 }
 
-function upsertOrder(payload: OrderFormPayload) {
-  if (modalMode.value === "create") {
-    ordersStore.createOrder(payload);
+async function upsertOrder(payload: OrderFormPayload) {
+  try {
+    if (modalMode.value === "create") {
+      await ordersStore.createOrder(payload);
+      isModalOpen.value = false;
+      return;
+    }
+
+    if (!selectedOrder.value) {
+      return;
+    }
+
+    await ordersStore.updateOrder(selectedOrder.value.id, payload);
     isModalOpen.value = false;
-    return;
+  } catch {
+    showError("Не удалось сохранить заказ. Проверьте доступность сервера.");
   }
-
-  if (!selectedOrder.value) {
-    return;
-  }
-
-  ordersStore.updateOrder(selectedOrder.value.id, payload);
-
-  isModalOpen.value = false;
 }
 
 function askDelete(orderId: number) {
@@ -170,12 +186,12 @@ function cancelDelete() {
   orderIdToDelete.value = null;
 }
 
-function confirmDelete() {
+async function confirmDelete() {
   if (orderIdToDelete.value === null) {
     return;
   }
 
-  ordersStore.deleteOrder(orderIdToDelete.value);
+  await ordersStore.deleteOrder(orderIdToDelete.value);
   orderIdToDelete.value = null;
 }
 
@@ -209,6 +225,16 @@ onMounted(() => {
       class="rounded-xl border border-slate-200 bg-white p-8 text-center text-sm text-slate-500 shadow-sm"
     >
       Загрузка заказов...
+    </div>
+    <div v-else-if="loadError" class="rounded-xl border border-red-200 bg-red-50 p-8 text-center text-sm text-red-700">
+      {{ loadError }}
+    </div>
+
+    <div
+      v-else-if="orders.length === 0"
+      class="rounded-xl border border-dashed border-slate-300 bg-white p-8 text-center text-sm text-slate-500"
+    >
+      У вас пока нет активных заказов. Создайте первый!
     </div>
 
     <div v-else class="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-5">

@@ -162,6 +162,10 @@ router.beforeEach((to) => {
     return { name: "home" };
   }
 
+  if (allowedRoles.length > 0 && !currentRole) {
+    return { name: "login" };
+  }
+
   if (allowedRoles.length > 0 && currentRole && !allowedRoles.includes(currentRole)) {
     return { name: "home" };
   }

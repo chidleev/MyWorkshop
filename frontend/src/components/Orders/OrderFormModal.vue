@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, reactive, watch } from "vue";
 import type { Order, OrderFormPayload } from "../../types/order";
+import { isValidRuPhone, normalizePhoneInput } from "../../utils/phone";
 
 const props = defineProps<{
   isOpen: boolean;
@@ -59,12 +60,10 @@ watch(
   { immediate: true }
 );
 
-const PHONE_PATTERN = /^\+7 \(\d{3}\) \d{3}-\d{2}-\d{2}$/;
-
 const errors = computed(() => {
   return {
     full_name: form.full_name.trim() ? "" : "Укажите ФИО клиента",
-    phone: PHONE_PATTERN.test(form.phone.trim()) ? "" : "Введите телефон в формате +7 (999) 999-99-99",
+    phone: isValidRuPhone(form.phone.trim()) ? "" : "Введите корректный телефон в формате +7 (999) 999-99-99",
     agreement_number: form.agreement_number.trim() ? "" : "Укажите номер договора",
     target_date:
       form.target_date && form.target_date >= today ? "" : "Дата сдачи не может быть в прошлом",
@@ -73,39 +72,11 @@ const errors = computed(() => {
 
 const isValid = computed(() => Object.values(errors.value).every((value) => !value));
 
-function normalizePhone(value: string) {
-  const digits = value.replace(/\D/g, "");
-  if (digits.length === 0) {
-    return "";
-  }
-
-  const local = digits.startsWith("8")
-    ? `7${digits.slice(1)}`
-    : digits.startsWith("7")
-      ? digits
-      : `7${digits}`;
-  const normalized = local.slice(0, 11);
-
-  let result = "+7";
-  if (normalized.length > 1) {
-    result += ` (${normalized.slice(1, 4)}`;
-  }
-  if (normalized.length >= 4) {
-    result += `) ${normalized.slice(4, 7)}`;
-  }
-  if (normalized.length >= 7) {
-    result += `-${normalized.slice(7, 9)}`;
-  }
-  if (normalized.length >= 9) {
-    result += `-${normalized.slice(9, 11)}`;
-  }
-
-  return result.trim();
-}
-
 function handlePhoneInput(event: Event) {
   const input = event.target as HTMLInputElement;
-  form.phone = normalizePhone(input.value);
+  const normalized = normalizePhoneInput(input.value, form.phone, (event as Event & { inputType?: string }).inputType);
+  form.phone = normalized;
+  input.value = normalized;
 }
 
 function handleClose() {
@@ -126,8 +97,6 @@ function handleSubmit() {
     agreement_number: form.agreement_number.trim(),
     target_date: form.target_date,
   });
-
-  resetForm();
 }
 </script>
 

@@ -3,6 +3,7 @@ import type { ProgressStatus, ShiftTask } from "../../types/workshop";
 
 defineProps<{
   task: ShiftTask;
+  isUpdating?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -52,17 +53,19 @@ function handleAction(task: ShiftTask) {
       v-if="task.progress_status === 'new'"
       type="button"
       class="mt-4 min-h-12 w-full rounded-md bg-primary px-4 py-3 text-base font-semibold text-white hover:bg-blue-700"
+      :disabled="isUpdating"
       @click="handleAction(task)"
     >
-      Взять в работу
+      {{ isUpdating ? "Обновление..." : "Взять в работу" }}
     </button>
     <button
       v-else-if="task.progress_status === 'in_progress'"
       type="button"
       class="mt-4 min-h-12 w-full rounded-md bg-success px-4 py-3 text-base font-semibold text-white hover:bg-green-700"
+      :disabled="isUpdating"
       @click="handleAction(task)"
     >
-      Завершить операцию
+      {{ isUpdating ? "Обновление..." : "Завершить операцию" }}
     </button>
     <div
       v-else

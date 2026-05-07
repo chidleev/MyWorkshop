@@ -13,7 +13,7 @@ const router = useRouter();
 const route = useRoute();
 const sidebarOpen = ref(false);
 const ordersStore = useManagerOrdersStore();
-ordersStore.ensureLoaded();
+void ordersStore.ensureLoaded();
 const isSidebarEditOpen = ref(false);
 
 interface MenuItem {
@@ -110,26 +110,26 @@ function isCurrentStatus(status: OrderStatus) {
   return currentOrder.value?.status === status;
 }
 
-function setStatus(status: OrderStatus) {
+async function setStatus(status: OrderStatus) {
   if (!currentOrder.value) {
     return;
   }
-  ordersStore.updateOrderStatus(currentOrder.value.id, status);
+  await ordersStore.updateOrderStatus(currentOrder.value.id, status);
 }
 
 async function deleteCurrentOrder() {
   if (!currentOrder.value) {
     return;
   }
-  ordersStore.deleteOrder(currentOrder.value.id);
+  await ordersStore.deleteOrder(currentOrder.value.id);
   await router.push({ name: "orders" });
 }
 
-function updateCurrentOrder(payload: OrderFormPayload) {
+async function updateCurrentOrder(payload: OrderFormPayload) {
   if (!currentOrder.value) {
     return;
   }
-  ordersStore.updateOrder(currentOrder.value.id, payload);
+  await ordersStore.updateOrder(currentOrder.value.id, payload);
   isSidebarEditOpen.value = false;
 }
 

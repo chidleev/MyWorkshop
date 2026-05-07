@@ -1,29 +1,49 @@
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed, onMounted, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
+import { uploadMedia } from "../../api/media";
+import { updateOrderStatus } from "../../api/orders";
 import PhotoReportUploader from "../../components/Installer/PhotoReportUploader.vue";
 import { useInstallerStore } from "../../stores/installer";
-import { showSuccess } from "../../utils/notification";
+import { showError, showSuccess } from "../../utils/notification";
 
 const route = useRoute();
 const router = useRouter();
 const selectedImage = ref<string | null>(null);
+const isSubmitting = ref(false);
 const installerStore = useInstallerStore();
+const loadError = computed(() => installerStore.loadError);
 
 const deploymentId = computed(() => Number(route.params.id));
 const deployment = computed(() =>
   installerStore.deployments.find((item) => item.id === deploymentId.value)
 );
 
+onMounted(() => {
+  void installerStore.ensureLoaded();
+});
+
 async function goBack() {
   await router.push({ name: "installer-deployments" });
 }
 
-async function completeWithPhoto() {
-  installerStore.completeDeployment(deploymentId.value);
-  showSuccess("Объект успешно сдан!");
-  await new Promise((resolve) => setTimeout(resolve, 700));
-  await goBack();
+async function completeWithPhoto(file: File) {
+  if (!deployment.value) {
+    return;
+  }
+
+  isSubmitting.value = true;
+  try {
+    await uploadMedia(deploymentId.value, file);
+    await updateOrderStatus(deploymentId.value, "Завершен");
+    installerStore.completeDeployment(deploymentId.value);
+    showSuccess("Объект успешно сдан!");
+    await goBack();
+  } catch {
+    showError("Не удалось загрузить фотоотчет. Статус заказа не изменен.");
+  } finally {
+    isSubmitting.value = false;
+  }
 }
 </script>
 
@@ -63,7 +83,7 @@ async function completeWithPhoto() {
       </div>
     </article>
 
-    <PhotoReportUploader @submit-photo="completeWithPhoto" />
+    <PhotoReportUploader :is-submitting="isSubmitting" @submit-photo="completeWithPhoto" />
 
     <div
       v-if="selectedImage"
@@ -85,6 +105,6 @@ async function completeWithPhoto() {
   </section>
 
   <section v-else class="rounded-xl border border-slate-200 bg-white p-4 text-sm text-slate-600 shadow-sm">
-    Выезд не найден.
+    {{ loadError || "Выезд не найден." }}
   </section>
 </template>

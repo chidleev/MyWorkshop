@@ -7,6 +7,12 @@ const router = Router();
 
 router.post("/", authMiddleware, requireRole(["Менеджер", "Руководитель"]), OrderController.createOrder);
 router.get("/", authMiddleware, OrderController.listOrders);
+router.get(
+  "/:id/media",
+  authMiddleware,
+  requireRole(["Менеджер", "Монтажник", "Руководитель", "Кладовщик", "Закупщик", "Мастер цеха"]),
+  OrderController.getMedia
+);
 router.put("/:id", authMiddleware, requireRole(["Менеджер", "Руководитель"]), OrderController.updateOrder);
 router.delete("/:id", authMiddleware, requireRole(["Менеджер", "Руководитель"]), OrderController.deleteOrder);
 router.post(

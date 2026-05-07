@@ -1,6 +1,11 @@
 <script setup lang="ts">
 import { ref } from "vue";
+import { uploadSpecification } from "../../api/orders";
 import { showError, showSuccess } from "../../utils/notification";
+const props = defineProps<{
+  orderId: number;
+}>();
+
 
 export interface SpecificationItem {
   article: string;
@@ -45,44 +50,21 @@ function processFile(file: File) {
   selectedFileName.value = file.name;
   isUploading.value = true;
 
-  const formData = new FormData();
-  formData.append("specification", file);
-  console.log("Specification formData:", formData.get("specification"));
-
-  setTimeout(() => {
-    const mockItems: SpecificationItem[] = [
-      {
-        article: "DSP-16-WHITE",
-        name: "ЛДСП белый 16 мм",
-        required_quantity: "6.50",
-        unit_price: "1850.00",
-        amount: "12025.00",
-      },
-      {
-        article: "EDGE-PVC-2",
-        name: "Кромка ПВХ 2 мм",
-        required_quantity: "42.00",
-        unit_price: "38.50",
-        amount: "1617.00",
-      },
-      {
-        article: "HINGE-BLUM",
-        name: "Петля Blum Clip-Top",
-        required_quantity: "12.00",
-        unit_price: "250.00",
-        amount: "3000.00",
-      },
-    ];
-
-    const total = mockItems
-      .reduce((sum, item) => sum + Number.parseFloat(item.amount), 0)
-      .toFixed(2);
-
-    isUploading.value = false;
-    successMessage.value = "Спецификация успешно загружена и обработана.";
-    showSuccess("Спецификация успешно загружена и обработана.");
-    emit("upload-success", { items: mockItems, totalCost: total, filename: file.name });
-  }, 1200);
+  uploadSpecification(props.orderId, file)
+    .then((response) => {
+      isUploading.value = false;
+      successMessage.value = "Спецификация успешно загружена и обработана.";
+      showSuccess("Спецификация успешно загружена и обработана.");
+      emit("upload-success", {
+        items: response.data.items,
+        totalCost: String(response.data.total_cost),
+        filename: file.name,
+      });
+    })
+    .catch(() => {
+      isUploading.value = false;
+      errorMessage.value = "Не удалось загрузить спецификацию.";
+    });
 }
 
 function handleFileChange(event: Event) {

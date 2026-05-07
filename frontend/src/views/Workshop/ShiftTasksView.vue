@@ -1,36 +1,17 @@
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed, onMounted, ref } from "vue";
+import { updateOrderStatus } from "../../api/orders";
+import { fetchTasks, type WorkshopTaskDto } from "../../api/workshop";
 import ShiftTaskCard from "../../components/Workshop/ShiftTaskCard.vue";
 import type { ProgressStatus, ShiftTask } from "../../types/workshop";
+import { showError } from "../../utils/notification";
+import { isServerAvailable, SERVER_UNAVAILABLE_MESSAGE } from "../../utils/serverHealth";
 
 const activeFilter = ref<ProgressStatus>("new");
-
-const tasks = ref<ShiftTask[]>([
-  {
-    id: 1,
-    order_id: 1,
-    order_number: "MM-2026-001",
-    operation_name: "Распил ДСП",
-    progress_status: "new",
-    due_time: "10:30",
-  },
-  {
-    id: 2,
-    order_id: 7,
-    order_number: "MM-2026-007",
-    operation_name: "Кромление",
-    progress_status: "in_progress",
-    due_time: "12:00",
-  },
-  {
-    id: 3,
-    order_id: 4,
-    order_number: "MM-2026-004",
-    operation_name: "Сборка",
-    progress_status: "done",
-    due_time: "15:00",
-  },
-]);
+const tasks = ref<ShiftTask[]>([]);
+const updatingTaskId = ref<number | null>(null);
+const isLoading = ref(false);
+const loadError = ref("");
 
 const tabs: Array<{ key: ProgressStatus; label: string }> = [
   { key: "new", label: "Новые" },
@@ -42,11 +23,62 @@ const filteredTasks = computed(() =>
   tasks.value.filter((task) => task.progress_status === activeFilter.value)
 );
 
-function updateTaskStatus(payload: { taskId: number; status: ProgressStatus }) {
-  tasks.value = tasks.value.map((task) =>
-    task.id === payload.taskId ? { ...task, progress_status: payload.status } : task
-  );
+function mapProgressStatus(status: string): ProgressStatus {
+  if (status === "В работе" || status === "in_progress") return "in_progress";
+  if (status === "Завершен" || status === "done") return "done";
+  return "new";
 }
+
+function toTaskModel(dto: WorkshopTaskDto): ShiftTask {
+  return {
+    id: dto.id,
+    order_id: dto.order_id,
+    order_number: dto.agreement_number,
+    operation_name: dto.operation_name,
+    progress_status: mapProgressStatus(dto.progress_status),
+    due_time: dto.target_date?.slice(0, 10) ?? "",
+  };
+}
+
+async function loadTasks() {
+  isLoading.value = true;
+  loadError.value = "";
+  if (!(await isServerAvailable())) {
+    tasks.value = [];
+    loadError.value = SERVER_UNAVAILABLE_MESSAGE;
+    isLoading.value = false;
+    return;
+  }
+  try {
+    const response = await fetchTasks();
+    tasks.value = response.data.map(toTaskModel);
+  } catch {
+    tasks.value = [];
+    loadError.value = "Не удалось загрузить сменные задания.";
+  } finally {
+    isLoading.value = false;
+  }
+}
+
+async function updateTaskStatus(payload: { taskId: number; status: ProgressStatus }) {
+  const task = tasks.value.find((item) => item.id === payload.taskId);
+  if (!task) return;
+
+  updatingTaskId.value = payload.taskId;
+  try {
+    const nextOrderStatus = payload.status === "in_progress" ? "В производстве" : "Готов к отгрузке";
+    await updateOrderStatus(task.order_id, nextOrderStatus);
+    await loadTasks();
+  } catch {
+    showError("Не удалось обновить статус задания.");
+  } finally {
+    updatingTaskId.value = null;
+  }
+}
+
+onMounted(() => {
+  void loadTasks();
+});
 </script>
 
 <template>
@@ -73,11 +105,18 @@ function updateTaskStatus(payload: { taskId: number; status: ProgressStatus }) {
       </button>
     </div>
 
-    <div class="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+    <div v-if="isLoading" class="rounded-xl border border-slate-200 bg-white p-4 text-sm text-slate-500 shadow-sm">
+      Загрузка заданий...
+    </div>
+    <div v-else-if="loadError" class="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700 shadow-sm">
+      {{ loadError }}
+    </div>
+    <div v-else class="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
       <ShiftTaskCard
         v-for="task in filteredTasks"
         :key="task.id"
         :task="task"
+        :is-updating="updatingTaskId === task.id"
         @update-status="updateTaskStatus"
       />
     </div>

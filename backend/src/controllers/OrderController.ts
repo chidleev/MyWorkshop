@@ -164,4 +164,19 @@ export class OrderController {
     await dbPool.query("INSERT INTO media_files (order_id, file_type, secure_link) VALUES (?, ?, ?)", [orderId, fileType, secureLink]);
     res.status(201).json({ status: "success", data: { secure_link: secureLink } });
   }
+
+  static async getMedia(req: Request, res: Response): Promise<void> {
+    const orderId = Number(req.params.id);
+    const fileType = String(req.query.file_type ?? "").trim();
+    const where = fileType ? "WHERE order_id = ? AND file_type = ?" : "WHERE order_id = ?";
+    const params = fileType ? [orderId, fileType] : [orderId];
+    const [rows] = await dbPool.query(
+      `SELECT id, order_id, file_type, secure_link, uploaded_at
+       FROM media_files
+       ${where}
+       ORDER BY uploaded_at DESC`,
+      params
+    );
+    res.json({ status: "success", data: rows });
+  }
 }

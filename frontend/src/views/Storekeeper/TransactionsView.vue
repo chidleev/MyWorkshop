@@ -1,26 +1,62 @@
 <script setup lang="ts">
-import { computed, ref } from "vue";
-import { useWorkshopDataStore } from "../../stores/workshopData";
+import { computed, onMounted, ref, watch } from "vue";
+import { fetchTransactions, type TransactionItem } from "../../api/inventory";
+import {
+  isServerAvailable,
+  isServerUnavailableError,
+  SERVER_UNAVAILABLE_MESSAGE,
+  withRequestTimeout,
+} from "../../utils/serverHealth";
 
-const workshopStore = useWorkshopDataStore();
 const txType = ref<"Все" | "Приход" | "Резерв" | "Списание">("Все");
 const orderSearch = ref("");
+const transactions = ref<TransactionItem[]>([]);
+const isLoading = ref(false);
+const loadError = ref("");
 
 const rows = computed(() => {
-  return workshopStore.transactions
-    .map((transaction) => {
-      const material = workshopStore.materials.find((item) => item.article === transaction.article);
-      return {
-        ...transaction,
-        materialName: material?.name ?? "Неизвестный материал",
-      };
-    })
+  return transactions.value
     .filter((row) => (txType.value === "Все" ? true : row.tx_type === txType.value))
     .filter((row) =>
       orderSearch.value.trim().length > 0
         ? (row.order_id ?? "").toLowerCase().includes(orderSearch.value.trim().toLowerCase())
         : true
     );
+});
+
+async function loadTransactions() {
+  isLoading.value = true;
+  loadError.value = "";
+  if (!(await isServerAvailable())) {
+    transactions.value = [];
+    loadError.value = SERVER_UNAVAILABLE_MESSAGE;
+    isLoading.value = false;
+    return;
+  }
+  try {
+    const response = await withRequestTimeout(
+      fetchTransactions({
+        tx_type: txType.value === "Все" ? undefined : txType.value,
+        order_id: orderSearch.value.trim() || undefined,
+      })
+    );
+    transactions.value = response?.data || [];
+  } catch (error) {
+    transactions.value = [];
+    loadError.value = isServerUnavailableError(error)
+      ? SERVER_UNAVAILABLE_MESSAGE
+      : "Не удалось загрузить журнал транзакций.";
+  } finally {
+    isLoading.value = false;
+  }
+}
+
+watch([txType, orderSearch], () => {
+  void loadTransactions();
+});
+
+onMounted(() => {
+  void loadTransactions();
 });
 </script>
 
@@ -47,7 +83,17 @@ const rows = computed(() => {
         />
       </div>
 
-      <div class="mt-4 overflow-x-auto">
+      <div v-if="isLoading" class="mt-4 text-sm text-slate-500">Загрузка журнала...</div>
+      <div v-else-if="loadError" class="mt-4 rounded-md border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+        {{ loadError }}
+      </div>
+      <div
+        v-else-if="rows.length === 0"
+        class="mt-4 rounded-md border border-dashed border-slate-300 p-4 text-sm text-slate-500"
+      >
+        По выбранным фильтрам нет транзакций.
+      </div>
+      <div v-else class="mt-4 overflow-x-auto">
         <table class="min-w-full text-sm">
           <thead class="bg-slate-100 text-slate-700">
             <tr>
@@ -63,14 +109,14 @@ const rows = computed(() => {
               <td class="px-3 py-2">{{ row.tx_date }}</td>
               <td class="px-3 py-2">
                 <div class="font-medium">{{ row.article }}</div>
-                <div class="text-xs text-slate-500">{{ row.materialName }}</div>
+                <div class="text-xs text-slate-500">{{ row.name }}</div>
               </td>
               <td class="px-3 py-2">{{ row.tx_type }}</td>
               <td
                 class="px-3 py-2 text-right font-semibold"
-                :class="row.quantity_change > 0 ? 'text-green-600' : 'text-red-600'"
+                :class="Number(row.quantity_change) > 0 ? 'text-green-600' : 'text-red-600'"
               >
-                {{ row.quantity_change > 0 ? "+" : "" }}{{ row.quantity_change.toFixed(3) }}
+                {{ Number(row.quantity_change) > 0 ? "+" : "" }}{{ Number(row.quantity_change).toFixed(3) }}
               </td>
               <td class="px-3 py-2">{{ row.order_id ?? "—" }}</td>
             </tr>

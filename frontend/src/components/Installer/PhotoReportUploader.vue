@@ -4,12 +4,13 @@ import { computed, ref } from "vue";
 const emit = defineEmits<{
   (event: "submit-photo", payload: File): void;
 }>();
+const props = defineProps<{
+  isSubmitting?: boolean;
+}>();
 
 const selectedFile = ref<File | null>(null);
 const previewUrl = ref("");
-const isUploading = ref(false);
-
-const canSubmit = computed(() => Boolean(selectedFile.value) && !isUploading.value);
+const canSubmit = computed(() => Boolean(selectedFile.value) && !props.isSubmitting);
 
 function handleFileChange(event: Event) {
   const input = event.target as HTMLInputElement;
@@ -35,11 +36,7 @@ async function submit() {
     return;
   }
 
-  isUploading.value = true;
-  await new Promise((resolve) => setTimeout(resolve, 1300));
   emit("submit-photo", selectedFile.value);
-  isUploading.value = false;
-  clearSelected();
 }
 </script>
 
@@ -71,7 +68,7 @@ async function submit() {
       :disabled="!canSubmit"
       @click="submit"
     >
-      <span v-if="isUploading" class="inline-flex items-center gap-2">
+      <span v-if="isSubmitting" class="inline-flex items-center gap-2">
         <span class="inline-block h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
         Отправка фото...
       </span>

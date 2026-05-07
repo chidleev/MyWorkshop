@@ -1,136 +1,73 @@
 import { computed, ref } from "vue";
+import { createOrder, deleteOrder, fetchOrders, type OrderDto, updateOrder, updateOrderStatus } from "../api/orders";
 import type { Order, OrderFormPayload, OrderStatus } from "../types/order";
 
 const orders = ref<Order[]>([]);
 const initialized = ref(false);
 
-function nowIso() {
-  return new Date().toISOString();
+function mapStageToStatus(stage: string): OrderStatus {
+  if (stage === "Распил") return "cutting";
+  if (stage === "Кромление") return "edging";
+  if (stage === "Сборка") return "assembly";
+  if (stage === "Готов к отгрузке" || stage === "Завершен") return "ready_to_ship";
+  return "new";
 }
 
-function futureDate(days: number) {
-  const date = new Date();
-  date.setDate(date.getDate() + days);
-  return date.toISOString().slice(0, 10);
+function mapStatusToStage(status: OrderStatus): string {
+  if (status === "cutting") return "Распил";
+  if (status === "edging") return "Кромление";
+  if (status === "assembly") return "Сборка";
+  if (status === "ready_to_ship") return "Готов к отгрузке";
+  return "Новый";
 }
 
-function createMockOrders(): Order[] {
-  return [
-    {
-      id: 1,
-      agreement_number: "MM-2026-001",
-      client_id: "crm-client-001",
-      manager_ext_id: "crm-manager-001",
-      full_name: "Павлов Артем",
-      phone: "+7 (901) 123-45-67",
-      email: "pavlov@example.com",
-      address: "г. Москва, ул. Тверская, 10",
-      status: "new",
-      target_date: futureDate(1),
-      total_cost: "128500.00",
-      created_at: nowIso(),
-      updated_at: nowIso()
-    },
-    {
-      id: 2,
-      agreement_number: "MM-2026-002",
-      client_id: "crm-client-002",
-      manager_ext_id: "crm-manager-001",
-      full_name: "Ильина Ольга",
-      phone: "+7 (925) 555-77-99",
-      email: "ilina@example.com",
-      address: "г. Химки, ул. Молодежная, 4",
-      status: "cutting",
-      target_date: futureDate(4),
-      total_cost: "84500.00",
-      created_at: nowIso(),
-      updated_at: nowIso()
-    },
-    {
-      id: 3,
-      agreement_number: "MM-2026-003",
-      client_id: "crm-client-003",
-      manager_ext_id: "crm-manager-001",
-      full_name: "Крылов Денис",
-      phone: "+7 (916) 888-12-34",
-      email: "krylov@example.com",
-      address: "г. Москва, Ленинский пр-т, 88",
-      status: "assembly",
-      target_date: futureDate(-1),
-      total_cost: "219900.00",
-      created_at: nowIso(),
-      updated_at: nowIso()
-    },
-    {
-      id: 4,
-      agreement_number: "MM-2026-004",
-      client_id: "crm-client-004",
-      manager_ext_id: "crm-manager-001",
-      full_name: "Семенова Ирина",
-      phone: "+7 (903) 765-43-21",
-      email: "semenova@example.com",
-      address: "г. Мытищи, ул. Юбилейная, 15",
-      status: "ready_to_ship",
-      target_date: futureDate(0),
-      total_cost: "156000.00",
-      created_at: nowIso(),
-      updated_at: nowIso()
-    }
-  ];
+function toOrderModel(dto: OrderDto): Order {
+  return {
+    id: dto.id,
+    agreement_number: dto.agreement_number,
+    client_id: String(dto.client_id),
+    manager_ext_id: dto.manager_ext_id,
+    full_name: dto.full_name,
+    phone: dto.phone,
+    email: "",
+    address: "",
+    status: mapStageToStatus(dto.current_stage),
+    target_date: dto.target_date?.slice(0, 10) ?? "",
+    total_cost: dto.total_cost,
+    created_at: dto.created_at,
+    updated_at: dto.updated_at,
+  };
 }
 
 export function useManagerOrdersStore() {
   const hasOrders = computed(() => orders.value.length > 0);
 
-  function ensureLoaded() {
-    if (initialized.value) {
+  async function ensureLoaded(force = false) {
+    if (initialized.value && !force) {
       return;
     }
-    orders.value = createMockOrders();
+    const response = await fetchOrders();
+    orders.value = response.data.map(toOrderModel);
     initialized.value = true;
   }
 
-  function createOrder(payload: OrderFormPayload) {
-    const nextId = Math.max(0, ...orders.value.map((order) => order.id)) + 1;
-    const timestamp = nowIso();
-    const newOrder: Order = {
-      id: nextId,
-      client_id: `crm-client-${nextId}`,
-      manager_ext_id: "crm-manager-001",
-      status: "new",
-      total_cost: null,
-      created_at: timestamp,
-      updated_at: timestamp,
-      ...payload
-    };
-    orders.value = [newOrder, ...orders.value];
+  async function createOrderInStore(payload: OrderFormPayload) {
+    await createOrder(payload);
+    await ensureLoaded(true);
   }
 
-  function updateOrder(orderId: number, payload: OrderFormPayload) {
-    orders.value = orders.value.map((order) =>
-      order.id === orderId
-        ? {
-            ...order,
-            ...payload,
-            updated_at: nowIso()
-          }
-        : order
-    );
+  async function updateOrderInStore(orderId: number, payload: OrderFormPayload) {
+    await updateOrder(orderId, payload);
+    await ensureLoaded(true);
   }
 
-  function updateOrderStatus(orderId: number, status: OrderStatus) {
-    orders.value = orders.value.map((order) =>
-      order.id === orderId
-        ? {
-            ...order,
-            status,
-            updated_at: nowIso()
-          }
-        : order
-    );
+  async function updateOrderStatusInStore(orderId: number, status: OrderStatus) {
+    await updateOrderStatus(orderId, mapStatusToStage(status));
+    await ensureLoaded(true);
   }
 
-  function deleteOrder(orderId: number) {
+  async function deleteOrderInStore(orderId: number) {
+    await deleteOrder(orderId);
     orders.value = orders.value.filter((order) => order.id !== orderId);
   }
 
@@ -142,10 +79,10 @@ export function useManagerOrdersStore() {
     orders,
     hasOrders,
     ensureLoaded,
-    createOrder,
-    updateOrder,
-    updateOrderStatus,
-    deleteOrder,
-    findById
+    createOrder: createOrderInStore,
+    updateOrder: updateOrderInStore,
+    updateOrderStatus: updateOrderStatusInStore,
+    deleteOrder: deleteOrderInStore,
+    findById,
   };
 }
