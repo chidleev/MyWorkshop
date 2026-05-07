@@ -2,6 +2,7 @@ import axios from "axios";
 import router from "../router";
 import { useAuthStore } from "../stores/auth";
 import { showError } from "../utils/notification";
+import { getDefaultRouteForRole } from "../utils/roleRoutes";
 
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL,
@@ -38,7 +39,7 @@ api.interceptors.response.use(
       }
     } else if (status === 403) {
       showError(message);
-      await router.push({ name: "home" });
+      await router.push(getDefaultRouteForRole(useAuthStore().userRole));
     } else if (hasNoResponse) {
       showError("Сервер недоступен. Проверьте подключение и повторите позже.");
     } else if (status === 400 || status === 500 || status === 502 || status === 503) {

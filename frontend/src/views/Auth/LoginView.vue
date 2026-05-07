@@ -2,6 +2,7 @@
 import { ref } from "vue";
 import { useRouter } from "vue-router";
 import { USER_ROLES, type UserRole, useAuthStore } from "../../stores/auth";
+import { getDefaultRouteForRole } from "../../utils/roleRoutes";
 
 const router = useRouter();
 const authStore = useAuthStore();
@@ -9,32 +10,7 @@ const selectedRole = ref<UserRole>(USER_ROLES[0]);
 
 async function handleLogin() {
   authStore.login(selectedRole.value);
-  if (selectedRole.value === "Менеджер") {
-    await router.push({ name: "orders" });
-    return;
-  }
-  if (selectedRole.value === "Мастер цеха") {
-    await router.push({ name: "workshop-tasks" });
-    return;
-  }
-  if (selectedRole.value === "Монтажник") {
-    await router.push({ name: "installer-deployments" });
-    return;
-  }
-  if (selectedRole.value === "Кладовщик") {
-    await router.push({ name: "storekeeper-inventory" });
-    return;
-  }
-  if (selectedRole.value === "Закупщик") {
-    await router.push({ name: "buyer-deficit" });
-    return;
-  }
-  if (selectedRole.value === "Руководитель") {
-    await router.push({ name: "director-monitoring" });
-    return;
-  }
-
-  await router.push({ name: "home" });
+  await router.push(getDefaultRouteForRole(selectedRole.value));
 }
 </script>
 

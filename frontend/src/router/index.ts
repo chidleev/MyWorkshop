@@ -2,9 +2,9 @@ import { createRouter, createWebHistory } from "vue-router";
 import AppLayout from "../layouts/AppLayout.vue";
 import AuthLayout from "../layouts/AuthLayout.vue";
 import LeadCaptureWidget from "../components/Client/LeadCaptureWidget.vue";
-import HomeView from "../views/HomeView.vue";
 import LoginView from "../views/Auth/LoginView.vue";
 import { useAuthStore, type UserRole } from "../stores/auth";
+import { getDefaultRouteForRole } from "../utils/roleRoutes";
 import OrdersView from "../views/Manager/OrdersView.vue";
 import OrderDetailView from "../views/Manager/OrderDetailView.vue";
 import ShiftTasksView from "../views/Workshop/ShiftTasksView.vue";
@@ -16,6 +16,7 @@ import DeficitReportView from "../views/Buyer/DeficitReportView.vue";
 import GlobalMonitoringView from "../views/Director/GlobalMonitoringView.vue";
 import WorkloadDashboardView from "../views/Director/WorkloadDashboardView.vue";
 import ProfitabilityReportView from "../views/Director/ProfitabilityReportView.vue";
+import NotFoundView from "../views/NotFoundView.vue";
 
 const router = createRouter({
   history: createWebHistory(),
@@ -49,11 +50,6 @@ const router = createRouter({
       component: AppLayout,
       meta: { requiresAuth: true },
       children: [
-        {
-          path: "",
-          name: "home",
-          component: HomeView,
-        },
         {
           path: "orders",
           name: "orders",
@@ -122,6 +118,12 @@ const router = createRouter({
         },
       ],
     },
+    {
+      path: "/:pathMatch(.*)*",
+      name: "not-found",
+      component: NotFoundView,
+      meta: { requiresAuth: false },
+    },
   ],
 });
 
@@ -135,31 +137,14 @@ router.beforeEach((to) => {
     (route) => (route.meta.allowedRoles as UserRole[] | undefined) ?? []
   );
   const currentRole = authStore.userRole ?? roleFromStorage;
+  const hasValidSession = hasToken && Boolean(currentRole);
 
-  if (requiresAuth && !hasToken) {
+  if (requiresAuth && !hasValidSession) {
     return { name: "login" };
   }
 
-  if (to.name === "login" && hasToken) {
-    if (currentRole === "Менеджер") {
-      return { name: "orders" };
-    }
-    if (currentRole === "Мастер цеха") {
-      return { name: "workshop-tasks" };
-    }
-    if (currentRole === "Монтажник") {
-      return { name: "installer-deployments" };
-    }
-    if (currentRole === "Кладовщик") {
-      return { name: "storekeeper-inventory" };
-    }
-    if (currentRole === "Закупщик") {
-      return { name: "buyer-deficit" };
-    }
-    if (currentRole === "Руководитель") {
-      return { name: "director-monitoring" };
-    }
-    return { name: "home" };
+  if ((to.path === "/" || to.name === "login") && hasValidSession) {
+    return getDefaultRouteForRole(currentRole);
   }
 
   if (allowedRoles.length > 0 && !currentRole) {
@@ -167,7 +152,7 @@ router.beforeEach((to) => {
   }
 
   if (allowedRoles.length > 0 && currentRole && !allowedRoles.includes(currentRole)) {
-    return { name: "home" };
+    return getDefaultRouteForRole(currentRole);
   }
 
   return true;
