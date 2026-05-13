@@ -23,7 +23,7 @@ describe("Workshop API", () => {
 
   it("should return tasks for master", async () => {
     vi.mocked(CrmAdapter.verifyToken).mockResolvedValue({
-      id: "master-1",
+      id: "master-cutting-001",
       role: "Мастер цеха",
       name: "Test Master"
     });

@@ -14,3 +14,15 @@ export async function fetchTasks(status?: string) {
     params: status ? { status } : undefined,
   });
 }
+
+const TASK_STATUS_BY_PROGRESS = {
+  new: "Ожидает",
+  in_progress: "В работе",
+  done: "Завершен",
+} as const;
+
+export async function updateWorkshopTaskStatus(taskId: number, status: "new" | "in_progress" | "done") {
+  return api.patch<unknown, ApiEnvelope<null>>(`/api/workshop/tasks/${taskId}/status`, {
+    status: TASK_STATUS_BY_PROGRESS[status],
+  });
+}

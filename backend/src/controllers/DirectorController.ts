@@ -1,5 +1,7 @@
 import type { Request, Response } from "express";
 import { dbPool } from "../config/db";
+import { NotificationService } from "../services/NotificationService";
+import { AppError } from "../utils/AppError";
 
 export class DirectorController {
   static async getOrders(req: Request, res: Response): Promise<void> {
@@ -73,5 +75,77 @@ export class DirectorController {
       grouped[row.operation_name][row.progress_status] = Number(row.task_count);
     });
     res.json({ status: "success", data: grouped });
+  }
+
+  static async getOrderDetails(req: Request, res: Response): Promise<void> {
+    const orderId = Number(req.params.id);
+    const [orderRows] = await dbPool.query(
+      `SELECT
+          o.*,
+          c.full_name,
+          c.phone,
+          c.email,
+          c.address
+       FROM orders o
+       JOIN clients c ON c.id = o.client_id
+       WHERE o.id = ?
+       LIMIT 1`,
+      [orderId]
+    );
+    const order = (orderRows as Array<Record<string, unknown>>)[0];
+    if (!order) {
+      res.status(404).json({ status: "error", message: "Заказ не найден" });
+      return;
+    }
+
+    const [specificationRows] = await dbPool.query(
+      `SELECT
+          si.material_id,
+          m.article,
+          m.name,
+          si.required_quantity,
+          si.sale_price
+       FROM specification_items si
+       JOIN materials m ON m.id = si.material_id
+       WHERE si.order_id = ?
+       ORDER BY m.name ASC`,
+      [orderId]
+    );
+
+    const [mediaRows] = await dbPool.query(
+      `SELECT id, file_type, secure_link, uploaded_at
+       FROM media_files
+       WHERE order_id = ?
+       ORDER BY uploaded_at DESC`,
+      [orderId]
+    );
+
+    const [historyRows] = await dbPool.query(
+      `SELECT id, stage_name, transition_date, employee_ext_id
+       FROM status_histories
+       WHERE order_id = ?
+       ORDER BY transition_date ASC, id ASC`,
+      [orderId]
+    );
+
+    res.json({
+      status: "success",
+      data: {
+        order,
+        specification: specificationRows,
+        media: mediaRows,
+        status_histories: historyRows
+      }
+    });
+  }
+
+  /** Пересоздание PDF чека и акта по текущим данным заказа (без повторной отправки email). */
+  static async regenerateOrderDocuments(req: Request, res: Response): Promise<void> {
+    const orderId = Number(req.params.id);
+    if (!Number.isFinite(orderId) || orderId <= 0) {
+      throw new AppError(400, "Некорректный идентификатор заказа");
+    }
+    const links = await NotificationService.generateDocuments(orderId);
+    res.json({ status: "success", data: links });
   }
 }

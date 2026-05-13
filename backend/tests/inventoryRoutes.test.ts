@@ -30,7 +30,7 @@ describe("Inventory API", () => {
     });
 
     vi.mocked(dbPool.query).mockResolvedValue([
-      [{ id: 1, name: "Material 1", current_stock: 10 }],
+      [{ id: 1, name: "Material 1", physical_stock: 10, reserved_change: 0 }],
       [] as any
     ]);
 
@@ -70,7 +70,7 @@ describe("Inventory API", () => {
     expect(response.status).toBe(200);
     expect(response.body.status).toBe("success");
     expect(mockConnection.query).toHaveBeenCalledWith(
-      "UPDATE materials SET current_stock = current_stock + ? WHERE id = ?",
+      "UPDATE materials SET stock_snapshot = stock_snapshot + ?, stock_snapshot_at = CURRENT_TIMESTAMP(3) WHERE id = ?",
       [50, 1]
     );
   });
@@ -83,7 +83,7 @@ describe("Inventory API", () => {
     });
 
     vi.mocked(dbPool.query).mockResolvedValue([
-      [{ id: 1, name: "Material 1", current_stock: -5, total_deficit_cost: 500 }],
+      [{ id: 1, name: "Material 1", physical_stock: -5, total_deficit_cost: 500 }],
       [] as any
     ]);
 

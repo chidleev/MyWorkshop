@@ -6,6 +6,12 @@ import { requireRole } from "../middlewares/roleMiddleware";
 const router = Router();
 
 router.get("/tasks", authMiddleware, requireRole(["Мастер цеха", "Руководитель"]), WorkshopController.getTasks);
+router.patch(
+  "/tasks/:id/status",
+  authMiddleware,
+  requireRole(["Мастер цеха", "Руководитель"]),
+  WorkshopController.patchTaskStatus
+);
 router.get(
   "/deployments",
   authMiddleware,

@@ -4,7 +4,7 @@ import { defineStore } from "pinia";
 export interface MaterialItem {
   article: string;
   name: string;
-  current_stock: number;
+  physical_stock: number;
   base_cost: number;
   unit: "шт" | "м2" | "м.п.";
 }
@@ -24,7 +24,7 @@ export interface ProjectOrder {
   client_name: string;
   manager_ext_id: string;
   manager_name: string;
-  status: "В обработке" | "В производстве" | "Монтаж" | "Завершен";
+  status: "Новый" | "В производстве" | "Монтаж" | "Завершен";
   target_date: string;
   total_cost: number;
 }
@@ -42,11 +42,11 @@ export interface ShiftTask {
 }
 
 const initialMaterials: MaterialItem[] = [
-  { article: "DSP-16-WHITE", name: "ЛДСП белый 16 мм", current_stock: 12.35, base_cost: 1850, unit: "м2" },
-  { article: "EDGE-PVC-2", name: "Кромка ПВХ 2 мм", current_stock: -4.5, base_cost: 38.5, unit: "м.п." },
-  { article: "HINGE-BLUM", name: "Петля Blum Clip-Top", current_stock: 0, base_cost: 250, unit: "шт" },
-  { article: "SCREW-3X16", name: "Саморез 3x16", current_stock: -120, base_cost: 1.8, unit: "шт" },
-  { article: "RAIL-500", name: "Направляющая 500 мм", current_stock: 26, base_cost: 390, unit: "шт" },
+  { article: "DSP-16-WHITE", name: "ЛДСП белый 16 мм", physical_stock: 12.35, base_cost: 1850, unit: "м2" },
+  { article: "EDGE-PVC-2", name: "Кромка ПВХ 2 мм", physical_stock: -4.5, base_cost: 38.5, unit: "м.п." },
+  { article: "HINGE-BLUM", name: "Петля Blum Clip-Top", physical_stock: 0, base_cost: 250, unit: "шт" },
+  { article: "SCREW-3X16", name: "Саморез 3x16", physical_stock: -120, base_cost: 1.8, unit: "шт" },
+  { article: "RAIL-500", name: "Направляющая 500 мм", physical_stock: 26, base_cost: 390, unit: "шт" },
 ];
 
 const initialTransactions: InventoryTransaction[] = [
@@ -146,7 +146,7 @@ export const useWorkshopDataStore = defineStore("workshop-data", () => {
   const specifications = ref<OrderSpecLine[]>(structuredClone(initialSpecifications));
   const tasks = ref<ShiftTask[]>(structuredClone(initialTasks));
 
-  const deficitMaterials = computed(() => materials.value.filter((item) => item.current_stock < 0));
+  const deficitMaterials = computed(() => materials.value.filter((item) => item.physical_stock < 0));
 
   const operationLoad = computed(() => {
     const operations = ["Распил", "Кромление", "Присадка", "Сборка"] as const;
@@ -209,7 +209,7 @@ export const useWorkshopDataStore = defineStore("workshop-data", () => {
       return;
     }
 
-    material.current_stock += quantity;
+    material.physical_stock += quantity;
     transactions.value = [
       {
         id: Date.now(),

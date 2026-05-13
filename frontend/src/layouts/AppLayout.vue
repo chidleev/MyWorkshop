@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed, ref, watch } from "vue";
 import { Icon } from "@iconify/vue";
 import { useRoute, useRouter } from "vue-router";
 import { useAuthStore } from "../stores/auth";
@@ -7,6 +7,7 @@ import type { UserRole } from "../stores/auth";
 import OrderFormModal from "../components/Orders/OrderFormModal.vue";
 import { useManagerOrdersStore } from "../stores/managerOrders";
 import type { OrderFormPayload, OrderStatus } from "../types/order";
+import { showError } from "../utils/notification";
 
 const authStore = useAuthStore();
 const router = useRouter();
@@ -15,6 +16,14 @@ const sidebarOpen = ref(false);
 const ordersStore = useManagerOrdersStore();
 void ordersStore.ensureLoaded();
 const isSidebarEditOpen = ref(false);
+const showCancelOrderConfirm = ref(false);
+
+watch(
+  () => [route.name, route.params.id] as const,
+  () => {
+    showCancelOrderConfirm.value = false;
+  }
+);
 
 interface MenuItem {
   label: string;
@@ -28,6 +37,12 @@ const menuItems: MenuItem[] = [
     label: "Мои заказы",
     routeName: "orders",
     icon: "heroicons:clipboard-document-list",
+    roles: ["Менеджер"],
+  },
+  {
+    label: "Заявки с сайта",
+    routeName: "manager-applications",
+    icon: "heroicons:inbox-arrow-down",
     roles: ["Менеджер"],
   },
   {
@@ -99,34 +114,120 @@ const currentOrder = computed(() => {
 });
 
 const statusButtons: Array<{ key: OrderStatus; label: string }> = [
-  { key: "new", label: "В обработке" },
-  { key: "cutting", label: "Распил" },
-  { key: "edging", label: "Кромление" },
-  { key: "assembly", label: "Сборка" },
-  { key: "ready_to_ship", label: "Готов к отгрузке" }
+  { key: "new", label: "Новый" },
+  { key: "in_production", label: "В производстве" },
+  { key: "ready_to_ship", label: "Готов к отгрузке" },
+  { key: "completed", label: "Завершен" },
 ];
+
+const canEditCurrentOrder = computed(() => currentOrder.value?.status === "new");
+const canCancelCurrentOrder = computed(() => currentOrder.value?.status === "new");
 
 function isCurrentStatus(status: OrderStatus) {
   return currentOrder.value?.status === status;
+}
+
+function getStatusBlockReason(status: OrderStatus): string | null {
+  const order = currentOrder.value;
+  if (!order) {
+    return "Заказ не найден";
+  }
+
+  const allTasksCompleted =
+    order.tasks_total_count > 0 && order.tasks_completed_count === order.tasks_total_count;
+
+  if (order.status === "completed" && status !== "completed") {
+    return "Нельзя изменить статус завершенного заказа";
+  }
+
+  if (
+    status === "completed" &&
+    order.status !== "ready_to_ship" &&
+    order.status !== "completed"
+  ) {
+    return "Статус «Завершен» доступен только после «Готов к отгрузке»";
+  }
+
+  if (!order.has_specification && (status === "in_production" || status === "ready_to_ship")) {
+    return "Нельзя перейти в этот статус без спецификации";
+  }
+
+  if (status === "ready_to_ship" && !allTasksCompleted) {
+    return "Статус 'Готов к отгрузке' доступен только после завершения всех заданий";
+  }
+
+  if (
+    order.status === "in_production" &&
+    status === "new" &&
+    order.tasks_started_count > 0
+  ) {
+    return "Нельзя вернуть в 'Новый', если задания уже начаты";
+  }
+
+  if (
+    order.status === "ready_to_ship" &&
+    (status === "new" || status === "in_production") &&
+    allTasksCompleted
+  ) {
+    return "Нельзя вернуть выполненный заказ в предыдущий статус";
+  }
+
+  return null;
+}
+
+function isStatusDisabled(status: OrderStatus) {
+  return isCurrentStatus(status) || Boolean(getStatusBlockReason(status));
 }
 
 async function setStatus(status: OrderStatus) {
   if (!currentOrder.value) {
     return;
   }
+  const blockReason = getStatusBlockReason(status);
+  if (blockReason) {
+    showError(blockReason);
+    return;
+  }
   await ordersStore.updateOrderStatus(currentOrder.value.id, status);
 }
 
-async function deleteCurrentOrder() {
+function openCancelOrderModal() {
+  if (!currentOrder.value || !canCancelCurrentOrder.value) {
+    if (currentOrder.value && !canCancelCurrentOrder.value) {
+      showError("Отменить можно только заказ, ещё не принятый в производство.");
+    }
+    return;
+  }
+  showCancelOrderConfirm.value = true;
+}
+
+function closeCancelOrderModal() {
+  showCancelOrderConfirm.value = false;
+}
+
+async function confirmCancelOrder() {
   if (!currentOrder.value) {
     return;
   }
-  await ordersStore.deleteOrder(currentOrder.value.id);
-  await router.push({ name: "orders" });
+  try {
+    await ordersStore.deleteOrder(currentOrder.value.id);
+    closeCancelOrderModal();
+    await router.push({ name: "orders" });
+  } catch (err: unknown) {
+    const msg =
+      err && typeof err === "object" && "response" in err
+        ? (err as { response?: { data?: { message?: string } } }).response?.data?.message
+        : undefined;
+    showError(msg ?? "Не удалось отменить заказ. Проверьте доступность сервера.");
+  }
 }
 
 async function updateCurrentOrder(payload: OrderFormPayload) {
   if (!currentOrder.value) {
+    return;
+  }
+  if (!canEditCurrentOrder.value) {
+    showError("Редактирование заказа недоступно после запуска производства.");
     return;
   }
   await ordersStore.updateOrder(currentOrder.value.id, payload);
@@ -160,7 +261,10 @@ async function handleLogout() {
           <p class="text-sm font-medium text-slate-900">
             {{ authStore.userInfo?.fullName ?? "Сотрудник" }}
           </p>
-          <p class="text-xs text-slate-500">{{ authStore.userRole ?? "Роль не выбрана" }}</p>
+          <p class="text-xs text-slate-500">
+            {{ authStore.userRole ?? "Роль не выбрана" }}
+            <span v-if="authStore.userInfo?.id"> - {{ authStore.userInfo.id }}</span>
+          </p>
         </div>
         <button
           type="button"
@@ -214,8 +318,19 @@ async function handleLogout() {
                 :key="item.key"
                 type="button"
                 class="rounded-md border px-3 py-2 text-left text-sm"
-                :class="isCurrentStatus(item.key) ? 'border-primary bg-primary/10 font-medium text-primary' : 'border-slate-300 hover:bg-slate-100'"
-                :disabled="isCurrentStatus(item.key)"
+                :class="[
+                  isCurrentStatus(item.key)
+                    ? 'border-primary bg-primary/10 font-medium text-primary'
+                    : 'border-slate-300',
+                  !isCurrentStatus(item.key) && !isStatusDisabled(item.key)
+                    ? 'hover:bg-slate-100'
+                    : '',
+                  !isCurrentStatus(item.key) && isStatusDisabled(item.key)
+                    ? 'cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400'
+                    : '',
+                ]"
+                :disabled="isStatusDisabled(item.key)"
+                :title="getStatusBlockReason(item.key) ?? ''"
                 @click="setStatus(item.key)"
               >
                 {{ item.label }}
@@ -226,17 +341,25 @@ async function handleLogout() {
           <div class="mt-3 flex flex-col gap-2">
             <button
               type="button"
-              class="w-full rounded-md border border-primary px-3 py-2 text-sm font-medium text-primary hover:bg-blue-50"
+              class="w-full rounded-md border border-primary px-3 py-2 text-sm font-medium text-primary hover:bg-blue-50 disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-100 disabled:text-slate-400"
+              :disabled="!canEditCurrentOrder"
+              :title="canEditCurrentOrder ? '' : 'Редактирование доступно только для новых заказов'"
               @click="isSidebarEditOpen = true"
             >
               Редактировать заказ
             </button>
             <button
               type="button"
-              class="w-full rounded-md border border-danger px-3 py-2 text-sm font-medium text-danger hover:bg-red-50"
-              @click="deleteCurrentOrder"
+              class="w-full rounded-md border border-danger px-3 py-2 text-sm font-medium text-danger hover:bg-red-50 disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-100 disabled:text-slate-400"
+              :disabled="!canCancelCurrentOrder"
+              :title="
+                canCancelCurrentOrder
+                  ? ''
+                  : 'Отмена доступна только для заказов, ещё не принятых в производство'
+              "
+              @click="openCancelOrderModal"
             >
-              Удалить заказ
+              Отменить заказ
             </button>
           </div>
         </section>
@@ -255,5 +378,37 @@ async function handleLogout() {
       @close="isSidebarEditOpen = false"
       @submit="updateCurrentOrder"
     />
+
+    <Teleport to="body">
+      <div
+        v-if="showCancelOrderConfirm && currentOrder"
+        class="fixed inset-0 z-[140] flex items-center justify-center bg-slate-900/60 p-4"
+        @click.self="closeCancelOrderModal"
+      >
+        <section class="w-full max-w-md rounded-xl bg-white p-5 shadow-xl">
+          <h3 class="text-lg font-semibold text-slate-900">Подтвердите отмену</h3>
+          <p class="mt-2 text-sm text-slate-600">
+            Отменить заказ {{ currentOrder.agreement_number }}? Данные по заказу будут удалены без возможности
+            восстановления.
+          </p>
+          <div class="mt-4 flex justify-end gap-2">
+            <button
+              type="button"
+              class="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100"
+              @click="closeCancelOrderModal"
+            >
+              Назад
+            </button>
+            <button
+              type="button"
+              class="rounded-md bg-danger px-4 py-2 text-sm font-medium text-white hover:bg-red-700"
+              @click="confirmCancelOrder"
+            >
+              Отменить
+            </button>
+          </div>
+        </section>
+      </div>
+    </Teleport>
   </div>
 </template>

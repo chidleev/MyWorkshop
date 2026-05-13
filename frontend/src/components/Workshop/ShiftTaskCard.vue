@@ -67,11 +67,5 @@ function handleAction(task: ShiftTask) {
     >
       {{ isUpdating ? "Обновление..." : "Завершить операцию" }}
     </button>
-    <div
-      v-else
-      class="mt-4 flex min-h-12 items-center justify-center rounded-md border border-success bg-green-50 px-4 py-3 text-base font-semibold text-success"
-    >
-      ✓ Выполнено
-    </div>
   </article>
 </template>

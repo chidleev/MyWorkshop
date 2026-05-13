@@ -23,3 +23,7 @@ export async function fetchOrderMedia(orderId: number, fileType?: string) {
     params: fileType ? { file_type: fileType } : undefined,
   });
 }
+
+export async function deleteOrderMedia(orderId: number, mediaId: number) {
+  return api.delete<unknown, ApiEnvelope<null>>(`/api/orders/${orderId}/media/${mediaId}`);
+}

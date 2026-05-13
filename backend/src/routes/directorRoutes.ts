@@ -7,6 +7,8 @@ const router = Router();
 
 router.use(authMiddleware, requireRole(["Руководитель"]));
 router.get("/orders", DirectorController.getOrders);
+router.post("/orders/:id/regenerate-documents", DirectorController.regenerateOrderDocuments);
+router.get("/orders/:id", DirectorController.getOrderDetails);
 router.get("/profitability", DirectorController.getProfitability);
 router.get("/workload", DirectorController.getWorkload);
 

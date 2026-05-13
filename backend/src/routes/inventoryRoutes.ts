@@ -5,6 +5,12 @@ import { requireRole } from "../middlewares/roleMiddleware";
 
 const router = Router();
 
+router.post(
+    "/materials",
+    authMiddleware,
+    requireRole(["Менеджер", "Руководитель", "Закупщик"]),
+    InventoryController.createMaterial
+);
 router.get("/", authMiddleware, requireRole(["Кладовщик", "Закупщик", "Руководитель", "Менеджер"]), InventoryController.getInventory);
 router.post(
   "/incoming",

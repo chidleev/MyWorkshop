@@ -1,5 +1,6 @@
 import { ref } from "vue";
 import { defineStore } from "pinia";
+import { resolveBackendAssetUrl } from "../api/baseUrl";
 import { fetchDeployments } from "../api/installer";
 import type { Deployment } from "../mocks/deployments";
 import { isServerAvailable, SERVER_UNAVAILABLE_MESSAGE } from "../utils/serverHealth";
@@ -33,8 +34,12 @@ export const useInstallerStore = defineStore("installer", () => {
         const existing = grouped.get(row.order_id);
         const mediaFiles =
           row.secure_link && row.secure_link.length > 0
-            ? [...(existing?.media_files ?? []), row.secure_link]
+            ? [...(existing?.media_files ?? []), resolveBackendAssetUrl(row.secure_link)]
             : existing?.media_files ?? [];
+        const normalizedTarget = row.target_date?.replace("T", " ") ?? "";
+        const [installDatePart = "", installTimePart = ""] = normalizedTarget.split(" ");
+        const installDate = installDatePart || "—";
+        const installTime = installTimePart ? installTimePart.slice(0, 5) : "—";
 
         grouped.set(row.order_id, {
           id: row.order_id,
@@ -42,14 +47,14 @@ export const useInstallerStore = defineStore("installer", () => {
           full_name: row.full_name,
           phone: row.phone,
           address: row.address,
-          install_date: row.target_date?.slice(0, 10) ?? "—",
-          install_time: "—",
+          install_date: installDate,
+          install_time: installTime,
           status: row.current_stage === "Завершен" ? "Монтаж завершен" : "Ожидает выезда",
           media_files: mediaFiles,
         });
       }
 
-      deployments.value = Array.from(grouped.values());
+      deployments.value = Array.from(grouped.values()).filter((item) => item.status !== "Монтаж завершен");
       initialized.value = true;
       isLoading.value = false;
     } catch {
@@ -61,9 +66,7 @@ export const useInstallerStore = defineStore("installer", () => {
   }
 
   function completeDeployment(id: number) {
-    deployments.value = deployments.value.map((item) =>
-      item.id === id ? { ...item, status: "Монтаж завершен" } : item
-    );
+    deployments.value = deployments.value.filter((item) => item.id !== id);
   }
 
   return {

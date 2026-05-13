@@ -1,26 +1,25 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
-import { updateOrderStatus } from "../../api/orders";
-import { fetchTasks, type WorkshopTaskDto } from "../../api/workshop";
+import { fetchTasks, type WorkshopTaskDto, updateWorkshopTaskStatus } from "../../api/workshop";
 import ShiftTaskCard from "../../components/Workshop/ShiftTaskCard.vue";
 import type { ProgressStatus, ShiftTask } from "../../types/workshop";
-import { showError } from "../../utils/notification";
 import { isServerAvailable, SERVER_UNAVAILABLE_MESSAGE } from "../../utils/serverHealth";
 
-const activeFilter = ref<ProgressStatus>("new");
 const tasks = ref<ShiftTask[]>([]);
 const updatingTaskId = ref<number | null>(null);
 const isLoading = ref(false);
 const loadError = ref("");
 
-const tabs: Array<{ key: ProgressStatus; label: string }> = [
-  { key: "new", label: "Новые" },
-  { key: "in_progress", label: "В работе" },
-  { key: "done", label: "Завершенные" },
-];
+const activeTasks = computed(() =>
+  tasks.value
+    .filter((task) => task.progress_status === "in_progress")
+    .sort((a, b) => a.due_time.localeCompare(b.due_time))
+);
 
-const filteredTasks = computed(() =>
-  tasks.value.filter((task) => task.progress_status === activeFilter.value)
+const queueTasks = computed(() =>
+  tasks.value
+    .filter((task) => task.progress_status === "new")
+    .sort((a, b) => a.due_time.localeCompare(b.due_time))
 );
 
 function mapProgressStatus(status: string): ProgressStatus {
@@ -51,7 +50,7 @@ async function loadTasks() {
   }
   try {
     const response = await fetchTasks();
-    tasks.value = response.data.map(toTaskModel);
+    tasks.value = response.data.map(toTaskModel).filter((t) => t.progress_status !== "done");
   } catch {
     tasks.value = [];
     loadError.value = "Не удалось загрузить сменные задания.";
@@ -66,11 +65,10 @@ async function updateTaskStatus(payload: { taskId: number; status: ProgressStatu
 
   updatingTaskId.value = payload.taskId;
   try {
-    const nextOrderStatus = payload.status === "in_progress" ? "В производстве" : "Готов к отгрузке";
-    await updateOrderStatus(task.order_id, nextOrderStatus);
+    await updateWorkshopTaskStatus(payload.taskId, payload.status);
     await loadTasks();
   } catch {
-    showError("Не удалось обновить статус задания.");
+    /* сообщение показывает axios-интерцептор (в т.ч. 409 с текстом с бэка) */
   } finally {
     updatingTaskId.value = null;
   }
@@ -82,43 +80,61 @@ onMounted(() => {
 </script>
 
 <template>
-  <section class="space-y-4">
+  <section class="space-y-6">
     <header class="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
       <h1 class="text-2xl font-bold text-slate-900 sm:text-3xl">Табло сменных заданий</h1>
-      <p class="mt-2 text-base text-slate-600">Задачи на текущую смену для мастера цеха.</p>
     </header>
 
-    <div class="flex flex-wrap gap-2 rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
-      <button
-        v-for="tab in tabs"
-        :key="tab.key"
-        type="button"
-        class="min-h-11 rounded-md px-4 text-sm font-semibold sm:text-base"
-        :class="
-          activeFilter === tab.key
-            ? 'bg-primary text-white'
-            : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-        "
-        @click="activeFilter = tab.key"
-      >
-        {{ tab.label }}
-      </button>
-    </div>
-
-    <div v-if="isLoading" class="rounded-xl border border-slate-200 bg-white p-4 text-sm text-slate-500 shadow-sm">
+    <div
+      v-if="isLoading"
+      class="rounded-xl border border-slate-200 bg-white p-4 text-sm text-slate-500 shadow-sm"
+    >
       Загрузка заданий...
     </div>
-    <div v-else-if="loadError" class="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700 shadow-sm">
+    <div
+      v-else-if="loadError"
+      class="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700 shadow-sm"
+    >
       {{ loadError }}
     </div>
-    <div v-else class="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-      <ShiftTaskCard
-        v-for="task in filteredTasks"
-        :key="task.id"
-        :task="task"
-        :is-updating="updatingTaskId === task.id"
-        @update-status="updateTaskStatus"
-      />
+    <div v-else class="space-y-8">
+      <section class="rounded-xl border border-amber-200 bg-amber-50/40 p-4 shadow-sm sm:p-5">
+        <div class="flex flex-wrap items-baseline justify-between gap-2">
+          <h2 class="text-lg font-semibold text-slate-900">Сейчас в работе</h2>
+          <span class="text-sm text-slate-600">всего: {{ activeTasks.length }}</span>
+        </div>
+        <p v-if="activeTasks.length === 0" class="mt-3 text-sm text-slate-600">
+          Ничего не запущено — возьмите задание из очереди ниже.
+        </p>
+        <div v-else class="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+          <ShiftTaskCard
+            v-for="task in activeTasks"
+            :key="task.id"
+            :task="task"
+            :is-updating="updatingTaskId === task.id"
+            @update-status="updateTaskStatus"
+          />
+        </div>
+      </section>
+
+      <section class="rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+        <div class="flex flex-wrap items-baseline justify-between gap-2">
+          <h2 class="text-lg font-semibold text-slate-900">Очередь</h2>
+          <span class="text-sm text-slate-600">всего: {{ queueTasks.length }}</span>
+        </div>
+        <p v-if="queueTasks.length === 0" class="mt-3 text-sm text-slate-500">
+          Новых заданий нет — отличная работа или проверьте фильтр на сервере.
+        </p>
+        <div v-else class="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+          <ShiftTaskCard
+            v-for="task in queueTasks"
+            :key="task.id"
+            :task="task"
+            :is-updating="updatingTaskId === task.id"
+            @update-status="updateTaskStatus"
+          />
+        </div>
+      </section>
     </div>
   </section>
 </template>

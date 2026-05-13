@@ -11,11 +11,29 @@ function buildMockProfile(token: string): UserProfile {
     storekeeper: "Кладовщик"
   };
 
-  const roleKey = token.split("-").at(-1) ?? "manager";
+  const employeeNames: Record<string, string> = {
+    "crm-manager-001": "Иванова Мария",
+    "crm-manager-002": "Павлов Артем",
+    "crm-manager-003": "Петров Илья",
+    "master-cutting-001": "Смирнов Павел",
+    "master-edging-001": "Федоров Никита",
+    "master-drilling-001": "Волков Антон",
+    "master-assembly-001": "Громов Сергей",
+    "installer-001": "Козлов Андрей",
+    "storekeeper-001": "Петров Сергей",
+    "buyer-001": "Соколова Елена",
+    "director-001": "Орлов Дмитрий"
+  };
+
+  const mockTokenParts = token.startsWith("mock:") ? token.split(":") : [];
+  const roleKey = mockTokenParts[1] ?? token.split("-").at(-1) ?? "manager";
+  const employeeExtId = mockTokenParts.slice(2).join(":") || `mock_${roleKey}`;
+  const role = roleMap[roleKey] ?? (Object.values(roleMap).includes(roleKey) ? roleKey : "Менеджер");
+
   return {
-    id: `mock_${roleKey}`,
-    fullName: `Mock ${roleMap[roleKey] ?? "Сотрудник"}`,
-    role: roleMap[roleKey] ?? "Менеджер"
+    id: employeeExtId,
+    fullName: employeeNames[employeeExtId] ?? `Mock ${role}`,
+    role
   };
 }
 

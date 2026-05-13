@@ -12,15 +12,44 @@ export const USER_ROLES = [
 
 export type UserRole = (typeof USER_ROLES)[number];
 
+export interface EmployeeOption {
+  id: string;
+  fullName: string;
+  role: UserRole;
+}
+
 export interface UserInfo {
   id: string;
   fullName: string;
   email: string;
 }
 
+export const MOCK_EMPLOYEES: EmployeeOption[] = [
+  { id: "crm-manager-001", fullName: "Иванова Мария", role: "Менеджер" },
+  { id: "crm-manager-002", fullName: "Павлов Артем", role: "Менеджер" },
+  { id: "crm-manager-003", fullName: "Петров Илья", role: "Менеджер" },
+  { id: "master-cutting-001", fullName: "Смирнов Павел", role: "Мастер цеха" },
+  { id: "master-edging-001", fullName: "Федоров Никита", role: "Мастер цеха" },
+  { id: "master-drilling-001", fullName: "Волков Антон", role: "Мастер цеха" },
+  { id: "master-assembly-001", fullName: "Громов Сергей", role: "Мастер цеха" },
+  { id: "installer-001", fullName: "Козлов Андрей", role: "Монтажник" },
+  { id: "storekeeper-001", fullName: "Петров Сергей", role: "Кладовщик" },
+  { id: "buyer-001", fullName: "Соколова Елена", role: "Закупщик" },
+  { id: "director-001", fullName: "Орлов Дмитрий", role: "Руководитель" },
+];
+
 const TOKEN_KEY = "auth.token";
 const ROLE_KEY = "auth.role";
 const USER_INFO_KEY = "auth.userInfo";
+
+const ROLE_TOKEN_KEYS: Record<UserRole, string> = {
+  Менеджер: "manager",
+  "Мастер цеха": "master",
+  Монтажник: "installer",
+  Кладовщик: "storekeeper",
+  Закупщик: "buyer",
+  Руководитель: "director",
+};
 
 function readUserInfo(): UserInfo | null {
   const raw = localStorage.getItem(USER_INFO_KEY);
@@ -35,24 +64,24 @@ function readUserInfo(): UserInfo | null {
   }
 }
 
-function buildUserInfo(role: UserRole): UserInfo {
-  const names: Record<UserRole, string> = {
-    Менеджер: "Иванова Мария",
-    "Мастер цеха": "Смирнов Павел",
-    Монтажник: "Козлов Андрей",
-    Кладовщик: "Петров Сергей",
-    Закупщик: "Соколова Елена",
-    Руководитель: "Орлов Дмитрий",
-  };
-
-  const slug = role
+function slugify(value: string) {
+  return value
     .toLowerCase()
     .replace(/\s+/g, "-")
     .replace(/[^a-zа-я0-9-]/gi, "");
+}
+
+function buildMockToken(role: UserRole, employeeExtId: string) {
+  return `mock:${ROLE_TOKEN_KEYS[role]}:${employeeExtId}`;
+}
+
+function buildUserInfo(role: UserRole, employeeExtId: string): UserInfo {
+  const employee = MOCK_EMPLOYEES.find((item) => item.role === role && item.id === employeeExtId);
+  const slug = slugify(employeeExtId);
 
   return {
-    id: `mock-${slug}`,
-    fullName: names[role],
+    id: employeeExtId,
+    fullName: employee?.fullName ?? employeeExtId,
     email: `${slug}@my-workshop.local`,
   };
 }
@@ -86,9 +115,9 @@ export const useAuthStore = defineStore("auth", () => {
     localStorage.removeItem(USER_INFO_KEY);
   }
 
-  function login(role: UserRole) {
-    const mockToken = `mock-jwt-token-${role}`;
-    const mockUserInfo = buildUserInfo(role);
+  function login(role: UserRole, employeeExtId: string) {
+    const mockToken = buildMockToken(role, employeeExtId);
+    const mockUserInfo = buildUserInfo(role, employeeExtId);
     setSession(mockToken, role, mockUserInfo);
   }
 

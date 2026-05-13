@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from "vue";
 import { fetchTransactions, type TransactionItem } from "../../api/inventory";
+import AppDataTable, { type DataTableColumn } from "../../components/Common/AppDataTable.vue";
 import {
   isServerAvailable,
   isServerUnavailableError,
@@ -12,6 +13,7 @@ const txType = ref<"Все" | "Приход" | "Резерв" | "Списани�
 const orderSearch = ref("");
 const transactions = ref<TransactionItem[]>([]);
 const isLoading = ref(false);
+const isRefreshing = ref(false);
 const loadError = ref("");
 
 const rows = computed(() => {
@@ -23,14 +25,31 @@ const rows = computed(() => {
         : true
     );
 });
+const transactionTableColumns: DataTableColumn[] = [
+  { key: "tx_date", label: "Дата и время", sortable: true },
+  { key: "article", label: "Номенклатура", sortable: true },
+  { key: "tx_type", label: "Тип действия", sortable: true },
+  { key: "quantity_change", label: "Изменение", sortable: true, align: "right" },
+  { key: "order_id", label: "Заказ", sortable: true },
+];
+const transactionTableRows = computed(() => rows.value as unknown as Record<string, unknown>[]);
 
-async function loadTransactions() {
-  isLoading.value = true;
+async function loadTransactions(options?: { soft?: boolean }) {
+  const soft = Boolean(options?.soft);
+  if (soft) {
+    isRefreshing.value = true;
+  } else {
+    isLoading.value = true;
+  }
   loadError.value = "";
   if (!(await isServerAvailable())) {
     transactions.value = [];
     loadError.value = SERVER_UNAVAILABLE_MESSAGE;
-    isLoading.value = false;
+    if (soft) {
+      isRefreshing.value = false;
+    } else {
+      isLoading.value = false;
+    }
     return;
   }
   try {
@@ -47,16 +66,20 @@ async function loadTransactions() {
       ? SERVER_UNAVAILABLE_MESSAGE
       : "Не удалось загрузить журнал транзакций.";
   } finally {
-    isLoading.value = false;
+    if (soft) {
+      isRefreshing.value = false;
+    } else {
+      isLoading.value = false;
+    }
   }
 }
 
 watch([txType, orderSearch], () => {
-  void loadTransactions();
+  void loadTransactions({ soft: true });
 });
 
 onMounted(() => {
-  void loadTransactions();
+  void loadTransactions({ soft: false });
 });
 </script>
 
@@ -87,41 +110,39 @@ onMounted(() => {
       <div v-else-if="loadError" class="mt-4 rounded-md border border-red-200 bg-red-50 p-4 text-sm text-red-700">
         {{ loadError }}
       </div>
-      <div
-        v-else-if="rows.length === 0"
-        class="mt-4 rounded-md border border-dashed border-slate-300 p-4 text-sm text-slate-500"
-      >
-        По выбранным фильтрам нет транзакций.
-      </div>
-      <div v-else class="mt-4 overflow-x-auto">
-        <table class="min-w-full text-sm">
-          <thead class="bg-slate-100 text-slate-700">
-            <tr>
-              <th class="px-3 py-2 text-left">Дата и время</th>
-              <th class="px-3 py-2 text-left">Номенклатура</th>
-              <th class="px-3 py-2 text-left">Тип действия</th>
-              <th class="px-3 py-2 text-right">Изменение</th>
-              <th class="px-3 py-2 text-left">Заказ</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="row in rows" :key="row.id" class="border-b border-slate-200 last:border-0">
-              <td class="px-3 py-2">{{ row.tx_date }}</td>
-              <td class="px-3 py-2">
-                <div class="font-medium">{{ row.article }}</div>
-                <div class="text-xs text-slate-500">{{ row.name }}</div>
-              </td>
-              <td class="px-3 py-2">{{ row.tx_type }}</td>
-              <td
-                class="px-3 py-2 text-right font-semibold"
-                :class="Number(row.quantity_change) > 0 ? 'text-green-600' : 'text-red-600'"
-              >
-                {{ Number(row.quantity_change) > 0 ? "+" : "" }}{{ Number(row.quantity_change).toFixed(3) }}
-              </td>
-              <td class="px-3 py-2">{{ row.order_id ?? "—" }}</td>
-            </tr>
-          </tbody>
-        </table>
+      <div v-else>
+        <div v-if="isRefreshing" class="mt-4 text-xs text-slate-500">Обновление журнала…</div>
+        <div
+          v-if="rows.length === 0"
+          class="mt-4 rounded-md border border-dashed border-slate-300 p-4 text-sm text-slate-500"
+        >
+          По выбранным фильтрам нет транзакций.
+        </div>
+        <AppDataTable
+          v-else
+          class="mt-4"
+          :rows="transactionTableRows"
+          :columns="transactionTableColumns"
+          row-key="id"
+          initial-sort-key="tx_date"
+          initial-sort-order="desc"
+        >
+          <template #cell-article="{ row }">
+            <div class="font-medium">{{ row.article }}</div>
+            <div class="text-xs text-slate-500">{{ row.name }}</div>
+          </template>
+          <template #cell-quantity_change="{ row }">
+            <span
+              class="font-semibold"
+              :class="Number(row.quantity_change) > 0 ? 'text-green-600' : 'text-red-600'"
+            >
+              {{ Number(row.quantity_change) > 0 ? "+" : "" }}{{ Number(row.quantity_change).toFixed(3) }}
+            </span>
+          </template>
+          <template #cell-order_id="{ row }">
+            {{ row.order_id ?? "—" }}
+          </template>
+        </AppDataTable>
       </div>
     </section>
   </section>

@@ -1,14 +1,52 @@
 import type { Request, Response } from "express";
+import type { ResultSetHeader } from "mysql2";
+import { z } from "zod";
 import { dbPool } from "../config/db";
+import { INV_TX, physicalStockExpression, reservedSumExpression } from "../constants/inventoryTransactions";
 import { AppError } from "../utils/AppError";
 
+const createMaterialSchema = z.object({
+  article: z.string().trim().min(1),
+  name: z.string().trim().min(1),
+  base_cost: z.coerce.number().positive()
+});
+
 export class InventoryController {
+    static async createMaterial(req: Request, res: Response): Promise<void> {
+        const parsed = createMaterialSchema.safeParse(req.body);
+        if (!parsed.success) {
+            throw new AppError(400, "Ошибка валидации");
+        }
+        const { article, name, base_cost } = parsed.data;
+
+        try {
+            const [result] = await dbPool.query<ResultSetHeader>(
+                "INSERT INTO materials (article, name, base_cost) VALUES (?, ?, ?)",
+                [article, name, Number(base_cost.toFixed(2))]
+            );
+            res.status(201).json({
+                status: "success",
+                data: { id: result.insertId, article, name, base_cost: Number(base_cost.toFixed(2)) }
+            });
+        } catch (error) {
+            const nodeError = error as NodeJS.ErrnoException & { code?: string };
+            if (nodeError.code === "ER_DUP_ENTRY") {
+                throw new AppError(409, "Позиция с таким артикулом уже существует");
+            }
+            throw error;
+        }
+    }
+
     static async getInventory(req: Request, res: Response): Promise<void> {
         const search = String(req.query.search ?? "").trim();
         const hasSearch = search.length > 0;
+        const physical = physicalStockExpression("m");
+        const reserved = reservedSumExpression("m");
         const [rows] = await dbPool.query(
-            `SELECT id, article, name, base_cost, current_stock
-       FROM materials
+            `SELECT id, article, name, base_cost,
+              ${physical} AS physical_stock,
+              ${reserved} AS reserved_change
+       FROM materials m
        ${hasSearch ? "WHERE article LIKE ? OR name LIKE ?" : ""}
        ORDER BY name ASC`,
             hasSearch ? [`%${search}%`, `%${search}%`] : [],
@@ -26,13 +64,13 @@ export class InventoryController {
         const connection = await dbPool.getConnection();
         try {
             await connection.beginTransaction();
-            await connection.query("UPDATE materials SET current_stock = current_stock + ? WHERE id = ?", [
-                quantity,
-                materialId,
-            ]);
             await connection.query(
-                "INSERT INTO inventory_transactions (material_id, order_id, tx_type, quantity_change) VALUES (?, NULL, 'Приход', ?)",
-                [materialId, quantity],
+                "UPDATE materials SET stock_snapshot = stock_snapshot + ?, stock_snapshot_at = CURRENT_TIMESTAMP(3) WHERE id = ?",
+                [quantity, materialId],
+            );
+            await connection.query(
+                `INSERT INTO inventory_transactions (material_id, order_id, tx_type, quantity_change) VALUES (?, NULL, ?, ?)`,
+                [materialId, INV_TX.INCOMING, quantity],
             );
             await connection.commit();
         } catch (error) {
@@ -45,11 +83,24 @@ export class InventoryController {
     }
 
     static async getDeficit(req: Request, res: Response): Promise<void> {
+        const raw = String(req.query.include_reserves ?? "").toLowerCase();
+        const includeReserves = raw === "1" || raw === "true" || raw === "yes";
+
+        const physical = physicalStockExpression("m");
+        const reserved = reservedSumExpression("m");
+        const effective = `(${physical} + ${reserved})`;
+        const stockForShortage = includeReserves ? effective : physical;
+
         const [rows] = await dbPool.query(
-            `SELECT id, article, name, base_cost, current_stock, ABS(current_stock) * base_cost AS total_deficit_cost
-       FROM materials
-       WHERE current_stock <= 0
-       ORDER BY current_stock ASC`,
+            `SELECT id, article, name, base_cost,
+              ${physical} AS physical_stock,
+              ${reserved} AS reserved_change,
+              ${effective} AS effective_stock,
+              ABS(${stockForShortage}) AS suggested_qty,
+              ABS(${stockForShortage}) * base_cost AS total_deficit_cost
+       FROM materials m
+       WHERE (${stockForShortage}) <= 0
+       ORDER BY ${stockForShortage} ASC`,
         );
         const total_budget = (rows as Array<{ total_deficit_cost: string | number }>).reduce(
             (sum, row) => sum + Number(row.total_deficit_cost),

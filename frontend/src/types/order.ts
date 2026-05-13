@@ -1,9 +1,8 @@
 export type OrderStatus =
   | "new"
-  | "cutting"
-  | "edging"
-  | "assembly"
-  | "ready_to_ship";
+  | "in_production"
+  | "ready_to_ship"
+  | "completed";
 
 export interface Order {
   id: number;
@@ -15,6 +14,11 @@ export interface Order {
   email: string;
   address: string;
   status: OrderStatus;
+  production_stage: string | null;
+  has_specification: boolean;
+  tasks_total_count: number;
+  tasks_started_count: number;
+  tasks_completed_count: number;
   target_date: string;
   total_cost: string | null;
   created_at: string;
@@ -28,4 +32,5 @@ export interface OrderFormPayload {
   address: string;
   agreement_number: string;
   target_date: string;
+  manager_ext_id?: string;
 }

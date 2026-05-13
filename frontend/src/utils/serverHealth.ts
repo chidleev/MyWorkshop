@@ -1,3 +1,5 @@
+import { API_BASE_URL } from "../api/baseUrl";
+
 export const SERVER_UNAVAILABLE_MESSAGE =
   "Сервер недоступен. Проверьте подключение и повторите позже.";
 
@@ -19,8 +21,7 @@ function withTimeout(promise: Promise<Response>, timeoutMs: number) {
 }
 
 export async function isServerAvailable(timeoutMs = 3000) {
-  const apiBase = (import.meta.env.VITE_API_URL as string | undefined) ?? "/api";
-  const healthUrl = `${apiBase.replace(/\/+$/, "")}/health`;
+  const healthUrl = `${API_BASE_URL}/api/health`;
 
   try {
     const response = await withTimeout(fetch(healthUrl), timeoutMs);

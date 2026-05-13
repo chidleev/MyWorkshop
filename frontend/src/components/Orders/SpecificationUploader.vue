@@ -1,24 +1,21 @@
 <script setup lang="ts">
 import { ref } from "vue";
-import { uploadSpecification } from "../../api/orders";
+import { uploadSpecification, type SpecificationMutationResponse } from "../../api/orders";
 import { showError, showSuccess } from "../../utils/notification";
 const props = defineProps<{
   orderId: number;
+  showHeader?: boolean;
 }>();
 
-
-export interface SpecificationItem {
-  article: string;
-  name: string;
-  required_quantity: string;
-  unit_price: string;
-  amount: string;
-}
+export type { SpecificationResponseItem as SpecificationItem } from "../../api/orders";
 
 const emit = defineEmits<{
   (
     event: "upload-success",
-    payload: { items: SpecificationItem[]; totalCost: string; filename: string }
+    payload: {
+      data: SpecificationMutationResponse;
+      filename: string;
+    }
   ): void;
 }>();
 
@@ -53,11 +50,13 @@ function processFile(file: File) {
   uploadSpecification(props.orderId, file)
     .then((response) => {
       isUploading.value = false;
-      successMessage.value = "Спецификация успешно загружена и обработана.";
-      showSuccess("Спецификация успешно загружена и обработана.");
+      const hasIssues = response.data.has_missing_materials;
+      successMessage.value = hasIssues
+        ? "Файл обработан. Есть позиции без номенклатуры — разрешите их ниже."
+        : "Спецификация успешно загружена и обработана.";
+      showSuccess(hasIssues ? successMessage.value : "Спецификация успешно загружена и обработана.");
       emit("upload-success", {
-        items: response.data.items,
-        totalCost: String(response.data.total_cost),
+        data: response.data,
         filename: file.name,
       });
     })
@@ -93,13 +92,18 @@ function onDrop(event: DragEvent) {
 </script>
 
 <template>
-  <section class="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-    <h3 class="text-lg font-semibold text-slate-900">Загрузка CSV-спецификации</h3>
-    <p class="mt-1 text-sm text-slate-500">Поддерживаются CSV-файлы до 2000 строк.</p>
+  <section>
+    <template v-if="props.showHeader !== false">
+      <h3 class="text-lg font-semibold text-slate-900">Загрузка CSV-спецификации</h3>
+      <p class="mt-1 text-sm text-slate-500">Поддерживаются CSV-файлы до 2000 строк.</p>
+    </template>
 
     <div
-      class="mt-4 rounded-lg border-2 border-dashed p-6 text-center transition"
-      :class="isDragging ? 'border-primary bg-blue-50' : 'border-slate-300 bg-slate-50'"
+      class="rounded-lg border-2 border-dashed p-6 text-center transition"
+      :class="[
+        isDragging ? 'border-primary bg-blue-50' : 'border-slate-300 bg-slate-50',
+        props.showHeader !== false ? 'mt-4' : '',
+      ]"
       @dragover.prevent="isDragging = true"
       @dragleave.prevent="isDragging = false"
       @drop="onDrop"

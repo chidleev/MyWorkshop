@@ -1,25 +1,59 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue";
+import { computed, onMounted, ref, watch } from "vue";
 import { fetchDeficitReport, type DeficitItem } from "../../api/inventory";
+import AppDataTable, { type DataTableColumn } from "../../components/Common/AppDataTable.vue";
 import { showSuccess, showWarning } from "../../utils/notification";
 import { isServerAvailable, SERVER_UNAVAILABLE_MESSAGE } from "../../utils/serverHealth";
 
 const rows = ref<DeficitItem[]>([]);
 const isLoading = ref(false);
+const isRefreshing = ref(false);
 const loadError = ref("");
+const includeReserves = ref(false);
+const purchaseQtyById = ref<Record<number, number>>({});
 
-const enrichedRows = computed(() =>
-  rows.value.map((item) => {
-    const required = Math.abs(Number(item.current_stock));
-    return {
-      ...item,
-      required,
-      budget: Number(item.total_deficit_cost ?? required * Number(item.base_cost)),
-    };
-  })
+watch(
+  rows,
+  (list) => {
+    const next: Record<number, number> = {};
+    for (const item of list) {
+      const id = Number(item.id);
+      next[id] = Number(item.suggested_qty ?? Math.abs(Number(item.physical_stock)));
+    }
+    purchaseQtyById.value = next;
+  },
+  { deep: true },
 );
 
-const totalBudget = computed(() => enrichedRows.value.reduce((sum, row) => sum + row.budget, 0));
+watch(includeReserves, () => {
+  void loadDeficitReport({ soft: true });
+});
+
+const displayRows = computed(() =>
+  rows.value.map((item) => {
+    const id = Number(item.id);
+    const suggested = Number(item.suggested_qty ?? Math.abs(Number(item.physical_stock)));
+    const qty = purchaseQtyById.value[id] ?? suggested;
+    const base = Number(item.base_cost);
+    return {
+      ...item,
+      purchase_qty: qty,
+      budget: qty * base,
+    };
+  }),
+);
+
+const totalBudget = computed(() => displayRows.value.reduce((sum, row) => sum + row.budget, 0));
+
+const deficitTableColumns: DataTableColumn[] = [
+  { key: "article", label: "Артикул", sortable: true },
+  { key: "name", label: "Наименование", sortable: true },
+  { key: "purchase_qty", label: "К закупке", sortable: true, align: "right", widthClass: "w-32" },
+  { key: "base_cost", label: "Цена закупки", sortable: true, align: "right" },
+  { key: "budget", label: "Сумма", sortable: true, align: "right" },
+];
+
+const deficitTableRows = computed(() => displayRows.value as unknown as Record<string, unknown>[]);
 
 function formatCurrency(value: number) {
   return new Intl.NumberFormat("ru-RU", {
@@ -30,38 +64,61 @@ function formatCurrency(value: number) {
   }).format(value);
 }
 
-async function loadDeficitReport() {
-  isLoading.value = true;
+function onPurchaseQtyInput(materialId: number, event: Event) {
+  const raw = (event.target as HTMLInputElement).value;
+  const normalized = raw.trim().replace(",", ".");
+  const n = Number(normalized);
+  if (!Number.isFinite(n) || n < 0) {
+    return;
+  }
+  purchaseQtyById.value = { ...purchaseQtyById.value, [materialId]: n };
+}
+
+async function loadDeficitReport(options?: { soft?: boolean }) {
+  const soft = Boolean(options?.soft);
+  if (soft) {
+    isRefreshing.value = true;
+  } else {
+    isLoading.value = true;
+  }
   loadError.value = "";
   if (!(await isServerAvailable())) {
     rows.value = [];
     loadError.value = SERVER_UNAVAILABLE_MESSAGE;
-    isLoading.value = false;
+    if (soft) {
+      isRefreshing.value = false;
+    } else {
+      isLoading.value = false;
+    }
     return;
   }
   try {
-    const response = await fetchDeficitReport();
+    const response = await fetchDeficitReport({ include_reserves: includeReserves.value });
     rows.value = response.data;
   } catch {
     rows.value = [];
     loadError.value = "Не удалось загрузить отчет о дефиците.";
   } finally {
-    isLoading.value = false;
+    if (soft) {
+      isRefreshing.value = false;
+    } else {
+      isLoading.value = false;
+    }
   }
 }
 
 function exportRequest() {
-  if (enrichedRows.value.length === 0) {
+  if (displayRows.value.length === 0) {
     showWarning("Нет дефицитных позиций для формирования заявки.");
     return;
   }
 
   const csvRows = [
     ["Артикул", "Наименование", "К закупке", "Цена закупки", "Сумма"],
-    ...enrichedRows.value.map((row) => [
+    ...displayRows.value.map((row) => [
       row.article,
       row.name,
-      row.required.toFixed(3),
+      Number(row.purchase_qty).toFixed(3),
       Number(row.base_cost).toFixed(2),
       row.budget.toFixed(2),
     ]),
@@ -80,7 +137,7 @@ function exportRequest() {
 }
 
 onMounted(() => {
-  void loadDeficitReport();
+  void loadDeficitReport({ soft: false });
 });
 </script>
 
@@ -88,14 +145,31 @@ onMounted(() => {
   <section class="space-y-4">
     <header class="rounded-xl border border-slate-300 bg-white p-4 shadow-sm">
       <h1 class="text-xl font-semibold text-slate-900">Отчет о дефиците материалов</h1>
-      <p class="text-sm text-slate-500">
-        Позиции с отрицательным остатком для формирования закупки.
-      </p>
+      <p class="text-sm text-slate-500">Позиции с нехваткой для формирования закупки.</p>
     </header>
 
     <section class="rounded-xl border border-slate-300 bg-white p-4 shadow-sm">
+      <div class="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <label class="flex cursor-pointer items-center gap-2 text-sm text-slate-700">
+          <input
+            v-model="includeReserves"
+            type="checkbox"
+            class="h-4 w-4 shrink-0 rounded border-slate-300 text-slate-800 focus:ring-slate-500"
+          />
+          <span>Учитывать резервы</span>
+        </label>
+        <button
+          type="button"
+          class="shrink-0 rounded-md border border-slate-300 px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50"
+          :disabled="isLoading || isRefreshing"
+          @click="loadDeficitReport({ soft: rows.length > 0 })"
+        >
+          Обновить
+        </button>
+      </div>
+
       <div class="mb-4 flex items-center justify-between">
-        <p class="text-sm text-slate-600">Общий бюджет покрытия дефицита</p>
+        <p class="text-sm text-slate-600">Общий бюджет</p>
         <p class="text-lg font-bold text-slate-900">{{ formatCurrency(totalBudget) }}</p>
       </div>
 
@@ -103,34 +177,39 @@ onMounted(() => {
       <div v-else-if="loadError" class="rounded-md border border-red-200 bg-red-50 p-6 text-sm text-red-700">
         {{ loadError }}
       </div>
-      <div v-else-if="enrichedRows.length === 0" class="rounded-md border border-green-200 bg-green-50 p-6 text-sm text-green-700">
-        Все материалы в наличии. Дефицита нет!
-      </div>
-      <div v-else class="overflow-x-auto">
-        <table class="min-w-full text-sm">
-          <thead class="bg-slate-100 text-slate-700">
-            <tr>
-              <th class="px-3 py-2 text-left">Артикул</th>
-              <th class="px-3 py-2 text-left">Наименование</th>
-              <th class="px-3 py-2 text-right">К закупке</th>
-              <th class="px-3 py-2 text-right">Цена закупки</th>
-              <th class="px-3 py-2 text-right">Сумма</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr
-              v-for="row in enrichedRows"
-              :key="row.article"
-              class="border-b border-slate-200 last:border-0"
-            >
-              <td class="px-3 py-2 font-medium">{{ row.article }}</td>
-              <td class="px-3 py-2">{{ row.name }}</td>
-              <td class="px-3 py-2 text-right text-danger">{{ row.required.toFixed(3) }}</td>
-              <td class="px-3 py-2 text-right">{{ formatCurrency(Number(row.base_cost)) }}</td>
-              <td class="px-3 py-2 text-right font-semibold">{{ formatCurrency(row.budget) }}</td>
-            </tr>
-          </tbody>
-        </table>
+      <div v-else>
+        <div v-if="isRefreshing" class="mb-3 text-xs text-slate-500">Обновление отчёта…</div>
+        <div
+          v-if="displayRows.length === 0"
+          class="rounded-md border border-green-200 bg-green-50 p-6 text-sm text-green-700"
+        >
+          Все материалы в наличии. Дефицита нет!
+        </div>
+        <AppDataTable
+          v-else
+          :rows="deficitTableRows"
+          :columns="deficitTableColumns"
+          row-key="id"
+          initial-sort-key="purchase_qty"
+          initial-sort-order="desc"
+        >
+          <template #cell-purchase_qty="{ row }">
+            <input
+              type="number"
+              min="0"
+              step="0.001"
+              class="w-full max-w-[7rem] rounded border border-slate-300 px-2 py-1 text-right text-sm tabular-nums focus:border-slate-500 focus:outline-none focus:ring-1 focus:ring-slate-400"
+              :value="Number(row.purchase_qty)"
+              @input="onPurchaseQtyInput(Number(row.id), $event)"
+            />
+          </template>
+          <template #cell-base_cost="{ row }">
+            {{ formatCurrency(Number(row.base_cost)) }}
+          </template>
+          <template #cell-budget="{ row }">
+            <span class="font-semibold">{{ formatCurrency(Number(row.budget)) }}</span>
+          </template>
+        </AppDataTable>
       </div>
 
       <button

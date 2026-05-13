@@ -1,16 +1,19 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { uploadMedia } from "../../api/media";
+import { fetchOrderMedia, uploadMedia } from "../../api/media";
 import { updateOrderStatus } from "../../api/orders";
 import PhotoReportUploader from "../../components/Installer/PhotoReportUploader.vue";
+import { resolveBackendAssetUrl } from "../../api/baseUrl";
 import { useInstallerStore } from "../../stores/installer";
+import { formatDateTime } from "../../utils/datetime";
 import { showError, showSuccess } from "../../utils/notification";
 
 const route = useRoute();
 const router = useRouter();
 const selectedImage = ref<string | null>(null);
 const isSubmitting = ref(false);
+const mediaFiles = ref<string[]>([]);
 const installerStore = useInstallerStore();
 const loadError = computed(() => installerStore.loadError);
 
@@ -20,8 +23,18 @@ const deployment = computed(() =>
 );
 
 onMounted(() => {
-  void installerStore.ensureLoaded();
+  void installerStore.ensureLoaded(true);
+  void loadMedia();
 });
+
+async function loadMedia() {
+  try {
+    const response = await fetchOrderMedia(deploymentId.value);
+    mediaFiles.value = response.data.map((item) => resolveBackendAssetUrl(item.secure_link));
+  } catch {
+    mediaFiles.value = [];
+  }
+}
 
 async function goBack() {
   await router.push({ name: "installer-deployments" });
@@ -35,6 +48,7 @@ async function completeWithPhoto(file: File) {
   isSubmitting.value = true;
   try {
     await uploadMedia(deploymentId.value, file);
+    await loadMedia();
     await updateOrderStatus(deploymentId.value, "Завершен");
     installerStore.completeDeployment(deploymentId.value);
     showSuccess("Объект успешно сдан!");
@@ -44,6 +58,12 @@ async function completeWithPhoto(file: File) {
   } finally {
     isSubmitting.value = false;
   }
+}
+
+function formatInstallDateTime(installDate: string, installTime: string) {
+  if (!installDate || installDate === "—") return "—";
+  if (!installTime || installTime === "—") return formatDateTime(installDate);
+  return formatDateTime(`${installDate}T${installTime}`);
 }
 </script>
 
@@ -64,7 +84,7 @@ async function completeWithPhoto(file: File) {
         {{ deployment.phone }}
       </a>
       <p class="mt-2 text-sm text-slate-600">
-        Монтаж: {{ deployment.install_date }} в {{ deployment.install_time }}
+        Монтаж: {{ formatInstallDateTime(deployment.install_date, deployment.install_time) }}
       </p>
     </article>
 
@@ -72,7 +92,7 @@ async function completeWithPhoto(file: File) {
       <h2 class="text-lg font-semibold text-slate-900">Рендеры проекта</h2>
       <div class="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3">
         <button
-          v-for="image in deployment.media_files"
+          v-for="image in mediaFiles.length > 0 ? mediaFiles : deployment.media_files"
           :key="image"
           type="button"
           class="overflow-hidden rounded-lg border border-slate-200"

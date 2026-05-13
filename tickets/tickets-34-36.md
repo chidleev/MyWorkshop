@@ -10,8 +10,9 @@
 - **Стек:** Express.js, TypeScript.
 - **Структура проекта:**
     - Создать базовую слоистую архитектуру папок: `src/controllers`, `src/services`, `src/routes`, `src/middlewares`, `src/config`, `src/utils`.
+- **Скрипты (`package.json`):** `dev` — `tsx watch src/server.ts` (точка входа процесса, вызывающая `startServer` из `app.ts`); `build` — `tsc`; `start` — `node dist/app.js` (поле `"main": "dist/app.js"` — для Phusion Passenger и прод-запуска используется скомпилированный **`app.js`**, а не `server.ts`).
 - **Конфигурация:**
-    - Инициализировать `package.json` и установить базовые зависимости (`express`, `cors`, `dotenv`, `typescript`, `@types/node`, `@types/express`, `ts-node-dev` или `tsx` для локальной разработки).
+    - Инициализировать `package.json` и установить базовые зависимости (`express`, `cors`, `dotenv`, `helmet`, `typescript`, `@types/*`, `tsx` для локальной разработки).
     - Настроить `tsconfig.json` (target: ES2022, module: CommonJS/ESNext, strict: true).
     - Создать файл `.env` для переменных окружения (в первую очередь `PORT=3000`).
 - **Базовый роут:**

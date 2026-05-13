@@ -1,5 +1,11 @@
 import { dbPool } from "../config/db";
 import { getMailTransporter } from "../config/mail";
+import { AppError } from "../utils/AppError";
+import {
+  buildOrderCompletedEmail,
+  buildWebApplicationRejectedEmail
+} from "../utils/transactionalEmailHtml";
+import { loadClosingOrderContext, writeClosingDocumentsToDisk } from "./ClosingDocumentsService";
 
 interface OrderClientInfo {
   order_id: number;
@@ -14,6 +20,17 @@ export class NotificationService {
     const receiptLink = `/documents/receipt_${orderId}.pdf`;
     const actLink = `/documents/act_${orderId}.pdf`;
 
+    const context = await loadClosingOrderContext(orderId);
+    if (!context) {
+      throw new AppError(404, "Заказ не найден");
+    }
+
+    await writeClosingDocumentsToDisk(context);
+
+    await dbPool.query(
+      `DELETE FROM media_files WHERE order_id = ? AND secure_link IN (?, ?)`,
+      [orderId, receiptLink, actLink]
+    );
     await dbPool.query(
       "INSERT INTO media_files (order_id, file_type, secure_link) VALUES (?, 'Чек', ?), (?, 'Акт', ?)",
       [orderId, receiptLink, orderId, actLink]
@@ -34,13 +51,21 @@ export class NotificationService {
       return;
     }
 
-    const subject = `Ваш заказ ${data.agreement_number ?? orderId} успешно завершен!`;
-    const html = `<p>Здравствуйте, ${data.full_name}!</p><p>Спасибо за заказ.</p><p>Чек: ${links.receiptLink}</p><p>Акт: ${links.actLink}</p>`;
+    const agreementLabel = data.agreement_number ?? String(orderId);
+    const subject = `Ваш заказ ${agreementLabel} успешно завершён`;
+    const { html, text } = buildOrderCompletedEmail({
+      fullName: data.full_name,
+      agreementLabel,
+      orderId,
+      totalCost: data.total_cost,
+      receiptPath: links.receiptLink,
+      actPath: links.actLink
+    });
 
     const transporter = getMailTransporter();
     if (!transporter) {
       console.log("SMTP is not configured. Mock email:");
-      console.log({ to: data.email, subject, html });
+      console.log({ to: data.email, subject, html, text });
       return;
     }
 
@@ -49,10 +74,49 @@ export class NotificationService {
         from: process.env.MAIL_FROM ?? "no-reply@myworkshop.local",
         to: data.email,
         subject,
-        html
+        html,
+        text
       });
     } catch (error) {
       console.error("SMTP send error:", error);
+    }
+  }
+
+  static async sendWebApplicationRejectedEmail(params: {
+    toEmail: string | null;
+    clientName: string;
+    agreementNumber: string | null;
+  }): Promise<void> {
+    const { toEmail, clientName, agreementNumber } = params;
+    if (!toEmail?.trim()) {
+      console.log("Rejection email skipped: client email is empty");
+      return;
+    }
+
+    const applicationRef = agreementNumber ?? "заявка";
+    const subject = `Заявка ${applicationRef} не принята в работу`;
+    const { html, text } = buildWebApplicationRejectedEmail({
+      clientName,
+      applicationRef
+    });
+
+    const transporter = getMailTransporter();
+    if (!transporter) {
+      console.log("SMTP is not configured. Mock rejection email:");
+      console.log({ to: toEmail, subject, html, text });
+      return;
+    }
+
+    try {
+      await transporter.sendMail({
+        from: process.env.MAIL_FROM ?? "no-reply@myworkshop.local",
+        to: toEmail.trim(),
+        subject,
+        html,
+        text
+      });
+    } catch (error) {
+      console.error("SMTP send error (rejection):", error);
     }
   }
 }

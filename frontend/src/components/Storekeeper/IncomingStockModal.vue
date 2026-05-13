@@ -50,49 +50,54 @@ function submit() {
       <section class="w-full max-w-lg rounded-xl bg-white p-5 shadow-xl">
       <h3 class="text-lg font-semibold text-slate-900">Оформить приход</h3>
 
-      <label class="mt-4 block text-sm font-medium text-slate-700">Номенклатура</label>
-      <select
-        v-model.number="selectedMaterialId"
-        class="mt-1 w-full rounded-md border-slate-300 text-sm focus:border-primary focus:ring-primary"
-      >
-        <option value="" disabled>Выберите материал</option>
-        <option v-for="item in materials" :key="item.id" :value="item.id">
-          {{ item.article }} — {{ item.name }}
-        </option>
-      </select>
+      <form class="mt-4 space-y-4" @submit.prevent="submit">
+        <div>
+          <label class="block text-sm font-medium text-slate-700">Номенклатура</label>
+          <select
+            v-model.number="selectedMaterialId"
+            class="mt-1 w-full rounded-md border-slate-300 text-sm focus:border-primary focus:ring-primary"
+          >
+            <option value="" disabled>Выберите материал</option>
+            <option v-for="item in materials" :key="item.id" :value="item.id">
+              {{ item.article }} — {{ item.name }}
+            </option>
+          </select>
+        </div>
 
-      <label class="mt-4 block text-sm font-medium text-slate-700">Количество</label>
-      <input
-        v-model="quantity"
-        type="text"
-        inputmode="decimal"
-        placeholder="Например: 12.500"
-        class="mt-1 w-full rounded-md border-slate-300 text-sm focus:border-primary focus:ring-primary"
-      />
-      <p
-        v-if="normalizedQuantity.length > 0 && (!Number.isFinite(quantityNumber) || quantityNumber <= 0)"
-        class="mt-1 text-xs text-danger"
-      >
-        Введите положительное количество.
-      </p>
+        <div>
+          <label class="block text-sm font-medium text-slate-700">Количество</label>
+          <input
+            v-model="quantity"
+            type="text"
+            inputmode="decimal"
+            placeholder="Например: 12.500"
+            class="mt-1 w-full rounded-md border-slate-300 text-sm focus:border-primary focus:ring-primary"
+          />
+          <p
+            v-if="normalizedQuantity.length > 0 && (!Number.isFinite(quantityNumber) || quantityNumber <= 0)"
+            class="mt-1 text-xs text-danger"
+          >
+            Введите положительное количество.
+          </p>
+        </div>
 
-      <div class="mt-5 flex justify-end gap-2">
-        <button
-          type="button"
-          class="rounded-md border border-slate-300 px-4 py-2 text-sm text-slate-700 hover:bg-slate-100"
-          @click="emit('close')"
-        >
-          Отмена
-        </button>
-        <button
-          type="button"
-          class="rounded-md bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-400"
-          :disabled="!isValid"
-          @click="submit"
-        >
-          Сохранить
-        </button>
-      </div>
+        <div class="flex justify-end gap-2 pt-1">
+          <button
+            type="button"
+            class="rounded-md border border-slate-300 px-4 py-2 text-sm text-slate-700 hover:bg-slate-100"
+            @click="emit('close')"
+          >
+            Отмена
+          </button>
+          <button
+            type="submit"
+            class="rounded-md bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-400"
+            :disabled="!isValid"
+          >
+            Сохранить
+          </button>
+        </div>
+      </form>
       </section>
     </div>
   </Teleport>

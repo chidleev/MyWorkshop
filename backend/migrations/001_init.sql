@@ -18,7 +18,7 @@ CREATE TABLE IF NOT EXISTS orders (
   manager_ext_id VARCHAR(255) NOT NULL,
   agreement_number VARCHAR(100),
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  target_date DATE,
+  target_date DATETIME,
   total_cost DECIMAL(10,2),
   current_stage VARCHAR(100) NOT NULL,
   INDEX idx_orders_client_id (client_id),
@@ -32,7 +32,8 @@ CREATE TABLE IF NOT EXISTS materials (
   article VARCHAR(100) NOT NULL UNIQUE,
   name VARCHAR(255) NOT NULL,
   base_cost DECIMAL(10,2) NOT NULL,
-  current_stock DECIMAL(10,3) NOT NULL DEFAULT 0.000
+  stock_snapshot DECIMAL(10,3) NOT NULL DEFAULT 0.000,
+  stock_snapshot_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS specification_items (

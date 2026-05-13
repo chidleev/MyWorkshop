@@ -6,16 +6,15 @@
 
 ## Технические требования
 
-- **Инициализация (`src/api/axios.ts` или `src/api/index.ts`):**
-    - Установить пакет `axios`.
-    - Создать базовый экземпляр (`axios.create()`) с указанием `baseURL`, который берется из переменных окружения Vite (`import.meta.env.VITE_API_URL`).
+- **Инициализация (`src/api/axios.ts`):**
+    - `axios.create({ baseURL: API_BASE_URL, timeout: 10000 })`, где **`API_BASE_URL`** нормализуется в `src/api/baseUrl.ts` из `import.meta.env.VITE_API_URL` (убирается хвостовой `/` и суффикс `/api`, чтобы `baseURL` указывал на корень бэкенда, а пути в запросах начинались с `/api/...`).
 - **Request Interceptor (Перехватчик запросов):**
     - Перед каждой отправкой запроса извлекать токен из хранилища (Pinia `authStore` или `localStorage`).
     - Если токен существует, добавлять заголовок: `Authorization: Bearer ${token}`.
 - **Response Interceptor (Перехватчик ответов):**
-    - При успешном ответе просто возвращать `response.data`.
-    - При ошибке HTTP 401 (Unauthorized): автоматически вызывать метод `logout()` в `authStore` и редиректить пользователя на экран логина.
-    - При HTTP 400 или 500: вызывать утилиту глобальных уведомлений (из Фронтенд-тикета 24) для отображения `toast.error(err.response.data.message)`.
+    - При успешном ответе возвращать **`response.data`** (интерцептор отдаёт уже тело ответа; типизированные обёртки `ApiEnvelope<T>` в `axios.ts`).
+    - При HTTP 401: `logout()` в `authStore`, редирект на именованный роут `login` если не на странице логина.
+    - При других ошибках: `showError` / toast с `message` из тела ответа при наличии.
 
 ## Критерии приемки (DoD)
 
@@ -38,13 +37,11 @@
     - Метод `login(role)` должен сохранять сгенерированный токен (или токен-заглушку) в `localStorage`.
     - Метод `logout()` должен очищать стейт и `localStorage`.
 - **Настройка Router Guards (`src/router/index.ts`):**
-    - Добавить метаданные к маршрутам: `meta: { requiresAuth: true, roles:['Менеджер', 'Руководитель'] }`.
-    - В `router.beforeEach` реализовать проверку:
-        1. Если роут требует авторизации, а токена нет -> редирект на `/login`.
-        2. Если роут требует специфичной роли, а `authStore.userRole` не совпадает -> редирект на экран 403 (Доступ запрещен) или на дефолтный дашборд текущей роли.
-        3. Если юзер авторизован и пытается зайти на `/login` -> редирект на главную.
+    - У защищённых дочерних маршрутов задаётся `meta: { allowedRoles: ['Менеджер', ...] satisfies UserRole[] }` (не legacy-поле `roles`).
+    - В `router.beforeEach`: проверка `meta.requiresAuth`, восстановление сессии из `localStorage` (`auth.token`, `auth.role`), редирект неавторизованных на `login`; при несовпадении роли с `allowedRoles` — редирект на дефолтный маршрут роли (`getDefaultRouteForRole`).
+    - Глобальный catch-all `/:pathMatch(.*)*` с `NotFoundView` и `requiresAuth: false`.
 - **Восстановление сессии:**
-    - При монтировании главного компонента `App.vue` проверять `localStorage`. Если токен есть, восстанавливать состояние `authStore` (чтобы после F5 сессия не терялась).
+    - При монтировании `App.vue`: если Pinia ещё не восстановлена, прочитать `localStorage` — нужны **все три** ключа: `auth.token`, `auth.role`, **`auth.userInfo`** (JSON); при успехе вызвать `authStore.setSession`; при битом JSON — `clearSession`.
 
 ## Критерии приемки (DoD)
 
@@ -58,15 +55,16 @@
 
 ## Описание
 
-Пришло время "оживить" главный рабочий экран Менеджера (Тикет 6). Необходимо заменить локальные mock-данные в компоненте канбан-доски на реальные данные, получаемые с бэкенда через REST API (эндпоинт из Бэкенд-тикета 40).
+Пришло время связать экраны менеджера с API (Тикеты 40, 66): канбан и веб-заявки используют `fetchOrders`, `fetchWebApplications`, `claimWebApplication`, `rejectWebApplication` без локальных mock-списков заказов.
 
 ## Технические требования
 
 - **API-сервис (`src/api/orders.ts`):**
     - Создать функции для работы с заказами: `fetchOrders(params)`, `createOrder(data)`, `updateOrder(id, data)`, `deleteOrder(id)`.
     - Они должны использовать настроенный `axios` из Тикета 64.
-- **Интеграция в Канбан-доску (`src/views/Manager/OrdersView.vue`):**
-    - В хуке `onMounted` вызвать `fetchOrders()`.
+- **Интеграция канбана и веб-заявок:**
+    - `OrdersView.vue` — как в Тикете 6.
+    - Экран **`WebApplicationsView.vue`** (`/orders/applications`): `fetchWebApplications`, действия `claimWebApplication` / `rejectWebApplication` согласно `src/api/orders.ts`.
     - Во время ожидания ответа отображать состояние загрузки (скелетон или спиннер).
     - Полученный ответ (массив заказов с джоином клиентов) распределить по колонкам доски, опираясь на поле `current_stage`.
 - **Обработка пустых состояний:**

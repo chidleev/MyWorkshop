@@ -7,6 +7,8 @@ const props = defineProps<{
   isOpen: boolean;
   mode: "create" | "edit";
   initialData?: Order | null;
+  /** Заголовок модального окна (по умолчанию — «Новый заказ» / «Редактирование заказа»). */
+  modalTitle?: string;
 }>();
 
 const emit = defineEmits<{
@@ -14,7 +16,44 @@ const emit = defineEmits<{
   (event: "submit", payload: OrderFormPayload): void;
 }>();
 
-const today = new Date().toISOString().slice(0, 10);
+function toDateTimeLocalValue(value: string): string {
+  if (!value) return "";
+  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(value)) return value;
+  const normalized = value.trim().replace(" ", "T");
+  const localDateMatch = normalized.match(
+    /^(\d{4})-(\d{2})-(\d{2})(?:T(\d{2}):(\d{2})(?::\d{2})?)?$/
+  );
+
+  if (localDateMatch) {
+    const [, year, month, day, hours = "00", minutes = "00"] = localDateMatch;
+    return `${year}-${month}-${day}T${hours}:${minutes}`;
+  }
+
+  const parsed = new Date(normalized);
+  if (Number.isNaN(parsed.getTime())) return "";
+
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${parsed.getFullYear()}-${pad(parsed.getMonth() + 1)}-${pad(parsed.getDate())}T${pad(
+    parsed.getHours()
+  )}:${pad(parsed.getMinutes())}`;
+}
+
+function getNowDateTimeLocal(): string {
+  const now = new Date();
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}T${pad(
+    now.getHours()
+  )}:${pad(now.getMinutes())}`;
+}
+
+const minDateTime = computed(() => getNowDateTimeLocal());
+
+/** Новый заказ или оформление веб-заявки без номера — номер присваивает сервер. */
+const usesAutoAgreementNumber = computed(
+  () =>
+    props.mode === "create" ||
+    (props.mode === "edit" && !String(props.initialData?.agreement_number ?? "").trim())
+);
 
 const form = reactive<OrderFormPayload>({
   full_name: "",
@@ -40,7 +79,7 @@ function fillForm(order: Order) {
   form.email = order.email;
   form.address = order.address;
   form.agreement_number = order.agreement_number;
-  form.target_date = order.target_date;
+  form.target_date = toDateTimeLocalValue(order.target_date);
 }
 
 watch(
@@ -60,13 +99,24 @@ watch(
   { immediate: true }
 );
 
+function isValidEmail(value: string) {
+  const t = value.trim();
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(t);
+}
+
 const errors = computed(() => {
+  const phoneTrim = form.phone.trim();
   return {
     full_name: form.full_name.trim() ? "" : "Укажите ФИО клиента",
-    phone: isValidRuPhone(form.phone.trim()) ? "" : "Введите корректный телефон в формате +7 (999) 999-99-99",
-    agreement_number: form.agreement_number.trim() ? "" : "Укажите номер договора",
+    phone: phoneTrim && !isValidRuPhone(phoneTrim) ? "Введите корректный телефон в формате +7 (999) 999-99-99" : "",
+    email: isValidEmail(form.email) ? "" : "Укажите корректный email",
+    agreement_number: usesAutoAgreementNumber.value
+      ? ""
+      : form.agreement_number.trim()
+        ? ""
+        : "Укажите номер договора",
     target_date:
-      form.target_date && form.target_date >= today ? "" : "Дата сдачи не может быть в прошлом",
+      form.target_date && form.target_date >= minDateTime.value ? "" : "Дата и время монтажа не могут быть в прошлом",
   };
 });
 
@@ -94,8 +144,8 @@ function handleSubmit() {
     phone: form.phone.trim(),
     email: form.email.trim(),
     address: form.address.trim(),
-    agreement_number: form.agreement_number.trim(),
-    target_date: form.target_date,
+    agreement_number: usesAutoAgreementNumber.value ? "" : form.agreement_number.trim(),
+    target_date: form.target_date ? `${form.target_date}:00` : "",
   });
 }
 </script>
@@ -107,7 +157,10 @@ function handleSubmit() {
       <header class="mb-4 flex items-start justify-between gap-4">
         <div>
           <h2 class="text-lg font-semibold text-slate-900">
-            {{ mode === "create" ? "Новый заказ" : "Редактирование заказа" }}
+            {{
+              props.modalTitle ??
+              (mode === "create" ? "Новый заказ" : "Редактирование заказа")
+            }}
           </h2>
           <p class="mt-1 text-sm text-slate-500">
             Заполните данные клиента и срок выполнения заказа.
@@ -126,20 +179,21 @@ function handleSubmit() {
         </label>
 
         <label>
-          <span class="mb-1 block text-sm font-medium text-slate-700">Телефон *</span>
+          <span class="mb-1 block text-sm font-medium text-slate-700">Телефон</span>
           <input
             :value="form.phone"
             type="tel"
             class="w-full rounded-md border-slate-300 text-sm"
-            placeholder="+7 (999) 999-99-99"
+            placeholder="+7 (999) 999-99-99 (необязательно)"
             @input="handlePhoneInput"
           />
           <span v-if="errors.phone" class="mt-1 block text-xs text-danger">{{ errors.phone }}</span>
         </label>
 
         <label>
-          <span class="mb-1 block text-sm font-medium text-slate-700">E-mail</span>
+          <span class="mb-1 block text-sm font-medium text-slate-700">E-mail *</span>
           <input v-model="form.email" type="email" class="w-full rounded-md border-slate-300 text-sm" />
+          <span v-if="errors.email" class="mt-1 block text-xs text-danger">{{ errors.email }}</span>
         </label>
 
         <label class="sm:col-span-2">
@@ -147,7 +201,7 @@ function handleSubmit() {
           <textarea v-model="form.address" rows="2" class="w-full rounded-md border-slate-300 text-sm" />
         </label>
 
-        <label>
+        <label v-if="!usesAutoAgreementNumber">
           <span class="mb-1 block text-sm font-medium text-slate-700">Номер договора *</span>
           <input v-model="form.agreement_number" type="text" class="w-full rounded-md border-slate-300 text-sm" />
           <span v-if="errors.agreement_number" class="mt-1 block text-xs text-danger">
@@ -155,9 +209,9 @@ function handleSubmit() {
           </span>
         </label>
 
-        <label>
+        <label :class="usesAutoAgreementNumber ? 'sm:col-span-2' : ''">
           <span class="mb-1 block text-sm font-medium text-slate-700">Плановая дата сдачи *</span>
-          <input v-model="form.target_date" :min="today" type="date" class="w-full rounded-md border-slate-300 text-sm" />
+          <input v-model="form.target_date" :min="minDateTime" type="datetime-local" class="w-full rounded-md border-slate-300 text-sm" />
           <span v-if="errors.target_date" class="mt-1 block text-xs text-danger">{{ errors.target_date }}</span>
         </label>
 

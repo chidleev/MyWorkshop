@@ -2,6 +2,7 @@
 import { computed, onMounted } from "vue";
 import { useRouter } from "vue-router";
 import { useInstallerStore } from "../../stores/installer";
+import { formatDateTime } from "../../utils/datetime";
 
 const router = useRouter();
 const installerStore = useInstallerStore();
@@ -10,11 +11,17 @@ const isLoading = computed(() => installerStore.isLoading);
 const loadError = computed(() => installerStore.loadError);
 
 onMounted(() => {
-  void installerStore.ensureLoaded();
+  void installerStore.ensureLoaded(true);
 });
 
 async function openDeployment(id: number) {
   await router.push({ name: "installer-deployment-detail", params: { id } });
+}
+
+function formatInstallDateTime(installDate: string, installTime: string) {
+  if (!installDate || installDate === "—") return "—";
+  if (!installTime || installTime === "—") return formatDateTime(installDate);
+  return formatDateTime(`${installDate}T${installTime}`);
 }
 </script>
 
@@ -49,7 +56,7 @@ async function openDeployment(id: number) {
       <p class="mt-1 text-lg font-semibold text-slate-900">{{ item.full_name }}</p>
       <p class="mt-1 text-sm text-slate-700">{{ item.address }}</p>
       <div class="mt-3 flex items-center justify-between">
-        <span class="text-sm font-medium text-slate-700">{{ item.install_date }} {{ item.install_time }}</span>
+        <span class="text-sm font-medium text-slate-700">{{ formatInstallDateTime(item.install_date, item.install_time) }}</span>
         <span class="rounded-full bg-amber-100 px-3 py-1 text-xs font-medium text-amber-700">
           {{ item.status }}
         </span>

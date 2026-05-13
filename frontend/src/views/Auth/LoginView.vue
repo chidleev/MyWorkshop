@@ -1,16 +1,61 @@
 <script setup lang="ts">
-import { ref } from "vue";
+import { computed, ref, watch } from "vue";
 import { useRouter } from "vue-router";
-import { USER_ROLES, type UserRole, useAuthStore } from "../../stores/auth";
+import { MOCK_EMPLOYEES, USER_ROLES, type UserRole, useAuthStore } from "../../stores/auth";
 import { getDefaultRouteForRole } from "../../utils/roleRoutes";
 
 const router = useRouter();
 const authStore = useAuthStore();
+const LAST_LOGIN_STORAGE_KEY = "myworkshop:last-login";
+
 const selectedRole = ref<UserRole>(USER_ROLES[0]);
+const employeeOptions = computed(() => MOCK_EMPLOYEES.filter((employee) => employee.role === selectedRole.value));
+const selectedEmployeeId = ref(employeeOptions.value[0]?.id ?? "");
+
+watch(selectedRole, () => {
+  const hasSelectedEmployee = employeeOptions.value.some((employee) => employee.id === selectedEmployeeId.value);
+  if (!hasSelectedEmployee) {
+    selectedEmployeeId.value = employeeOptions.value[0]?.id ?? "";
+  }
+});
+
+restoreLastLogin();
 
 async function handleLogin() {
-  authStore.login(selectedRole.value);
+  persistLastLogin();
+  authStore.login(selectedRole.value, selectedEmployeeId.value);
   await router.push(getDefaultRouteForRole(selectedRole.value));
+}
+
+function persistLastLogin() {
+  const payload = JSON.stringify({
+    role: selectedRole.value,
+    employeeId: selectedEmployeeId.value
+  });
+  localStorage.setItem(LAST_LOGIN_STORAGE_KEY, payload);
+}
+
+function restoreLastLogin() {
+  const savedValue = localStorage.getItem(LAST_LOGIN_STORAGE_KEY);
+  if (!savedValue) {
+    return;
+  }
+
+  try {
+    const parsed = JSON.parse(savedValue) as { role?: string; employeeId?: string };
+    if (parsed.role && USER_ROLES.includes(parsed.role as UserRole)) {
+      selectedRole.value = parsed.role as UserRole;
+    }
+
+    if (parsed.employeeId) {
+      const canUseSavedEmployee = employeeOptions.value.some((employee) => employee.id === parsed.employeeId);
+      if (canUseSavedEmployee) {
+        selectedEmployeeId.value = parsed.employeeId;
+      }
+    }
+  } catch {
+    localStorage.removeItem(LAST_LOGIN_STORAGE_KEY);
+  }
 }
 </script>
 
@@ -32,9 +77,26 @@ async function handleLogin() {
       </option>
     </select>
 
+    <label class="mt-5 block text-sm font-medium text-slate-700" for="employee">
+      employee_ext_id
+    </label>
+    <select
+      id="employee"
+      v-model="selectedEmployeeId"
+      class="mt-2 block w-full rounded-md border-slate-300 text-slate-900 shadow-sm focus:border-primary focus:ring-primary"
+    >
+      <option v-for="employee in employeeOptions" :key="employee.id" :value="employee.id">
+        {{ employee.id }} - {{ employee.fullName }}
+      </option>
+    </select>
+    <p class="mt-2 text-xs text-slate-500">
+      Этот идентификатор будет передан в backend как текущий сотрудник.
+    </p>
+
     <button
       type="button"
       class="mt-5 w-full rounded-md bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+      :disabled="!selectedEmployeeId"
       @click="handleLogin"
     >
       Войти

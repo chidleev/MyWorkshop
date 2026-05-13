@@ -1,7 +1,11 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
+import { useRouter } from "vue-router";
 import { fetchProfitability, type ProfitabilityRow } from "../../api/director";
+import AppDataTable, { type DataTableColumn } from "../../components/Common/AppDataTable.vue";
 import { isServerAvailable, SERVER_UNAVAILABLE_MESSAGE } from "../../utils/serverHealth";
+
+const router = useRouter();
 
 const isLoading = ref(false);
 const rows = ref<ProfitabilityRow[]>([]);
@@ -16,6 +20,15 @@ const totals = computed(() => {
       : 0;
   return { revenue, cogs, averageMargin };
 });
+const profitabilityTableColumns: DataTableColumn[] = [
+  { key: "agreement_number", label: "Заказ / Клиент", sortable: true },
+  { key: "revenue", label: "Сумма договора", sortable: true, align: "right" },
+  { key: "cogs", label: "Себестоимость", sortable: true, align: "right" },
+  { key: "profit", label: "Валовая прибыль", sortable: true, align: "right" },
+  { key: "margin_percent", label: "Рентабельность", sortable: true, align: "right" },
+  { key: "actions", label: "Действия", align: "right", widthClass: "w-[120px]" },
+];
+const profitabilityTableRows = computed(() => rows.value as unknown as Record<string, unknown>[]);
 
 function formatCurrency(value: number) {
   return new Intl.NumberFormat("ru-RU", {
@@ -24,6 +37,10 @@ function formatCurrency(value: number) {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   }).format(value);
+}
+
+function openOrderDetail(orderId: number) {
+  void router.push({ name: "director-order-detail", params: { id: String(orderId) } });
 }
 
 async function loadProfitability() {
@@ -77,31 +94,34 @@ onMounted(() => {
       <div v-else-if="loadError" class="rounded-md border border-red-200 bg-red-50 p-4 text-sm text-red-700">
         {{ loadError }}
       </div>
-      <div v-else class="overflow-x-auto">
-        <table class="min-w-full text-sm">
-          <thead class="bg-slate-100 text-slate-700">
-            <tr>
-              <th class="px-3 py-2 text-left">Заказ / Клиент</th>
-              <th class="px-3 py-2 text-right">Сумма договора</th>
-              <th class="px-3 py-2 text-right">Себестоимость</th>
-              <th class="px-3 py-2 text-right">Валовая прибыль</th>
-              <th class="px-3 py-2 text-right">Рентабельность</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="row in rows" :key="row.order_id" class="border-b border-slate-200 last:border-0">
-              <td class="px-3 py-2">
-                <div class="font-medium">{{ row.agreement_number }}</div>
-                <div class="text-xs text-slate-500">{{ row.client_name }}</div>
-              </td>
-              <td class="px-3 py-2 text-right">{{ formatCurrency(Number(row.revenue)) }}</td>
-              <td class="px-3 py-2 text-right">{{ formatCurrency(Number(row.cogs)) }}</td>
-              <td class="px-3 py-2 text-right font-semibold">{{ formatCurrency(Number(row.profit)) }}</td>
-              <td class="px-3 py-2 text-right">{{ Number(row.margin_percent).toFixed(2) }}%</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
+      <AppDataTable
+        v-else
+        :rows="profitabilityTableRows"
+        :columns="profitabilityTableColumns"
+        row-key="order_id"
+        initial-sort-key="profit"
+        initial-sort-order="desc"
+      >
+        <template #cell-agreement_number="{ row }">
+          <div class="font-medium">{{ row.agreement_number }}</div>
+          <div class="text-xs text-slate-500">{{ row.client_name }}</div>
+        </template>
+        <template #cell-revenue="{ row }">{{ formatCurrency(Number(row.revenue)) }}</template>
+        <template #cell-cogs="{ row }">{{ formatCurrency(Number(row.cogs)) }}</template>
+        <template #cell-profit="{ row }">
+          <span class="font-semibold">{{ formatCurrency(Number(row.profit)) }}</span>
+        </template>
+        <template #cell-margin_percent="{ row }">{{ Number(row.margin_percent).toFixed(2) }}%</template>
+        <template #cell-actions="{ row }">
+          <button
+            type="button"
+            class="rounded-md border border-primary px-3 py-1.5 text-xs text-primary hover:bg-blue-50"
+            @click="openOrderDetail(Number(row.order_id))"
+          >
+            Карточка
+          </button>
+        </template>
+      </AppDataTable>
     </section>
   </section>
 </template>

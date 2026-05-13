@@ -11,7 +11,7 @@
     - Реализовать метод `verifyToken(token: string): Promise<UserProfile>`.
 - **Конфигурация и Mock-режим:**
     - Добавить переменную окружения `CRM_API_URL`.
-    - _Важно:_ Так как реального доступа к CRM на этапе разработки может не быть, необходимо реализовать mock-режим. Если `CRM_API_URL` не задан (или установлен флаг `USE_MOCK_CRM=true`), Адаптер должен локально расшифровывать fake-токен (например, `mock-jwt-token-manager`) и возвращать предзаполненный объект профиля (ID, ФИО, Роль).
+    - _Важно:_ Так как реального доступа к CRM на этапе разработки может не быть, необходимо реализовать mock-режим. Если `CRM_API_URL` не задан (или установлен флаг `USE_MOCK_CRM=true`), Адаптер должен локально разбирать токен фронтенда: префикс **`mock:`**, затем ключ роли (`manager`, `master`, `installer`, `storekeeper`, `buyer`, `director`), затем **`employee_ext_id`** до конца строки (например `mock:manager:crm-manager-001`). Для обратной совместимости допускается разбор старых токенов без префикса `mock:` (fallback в `buildMockProfile`).
 - **Интерфейсы (TypeScript):**
     - Описать интерфейс `UserProfile`, содержащий поля `id` (соответствует `manager_ext_id` / `employee_ext_id` в БД), `fullName`, `role`.
 
@@ -62,15 +62,11 @@
 
 - **Маршрутизация (`src/routes/orderRoutes.ts`):**
     - Создать роут `POST /api/orders`.
-    - Защитить эндпоинт с помощью `authMiddleware` и `requireRole(['Менеджер'])` (если заказ создает сотрудник).
+    - Защитить `authMiddleware` и `requireRole(['Менеджер', 'Руководитель'])`.
 - **Контроллер (`src/controllers/OrderController.ts`):**
-    - Принимает JSON-тело: `client_id`, `agreement_number`, `target_date`.
-    - `manager_ext_id` брать строго из `req.user.id` (чтобы менеджер не мог создать заказ от имени другого сотрудника).
-    - Назначить дефолтные значения: `total_cost = 0.00` (так как спецификация еще не загружена), `current_stage = 'Новый'`.
-- **Валидация:**
-    - Проверить наличие всех обязательных полей (рекомендуется использовать библиотеку валидации, например `Zod` или `Joi`). Если данные невалидны — `AppError(400, 'Ошибка валидации')`.
-- **Сохранение (SQL):**
-    - Выполнить `INSERT INTO orders ...` с использованием пула соединений БД (Тикет 35).
+    - Тело (Zod `createOrderSchema`): `full_name`, `phone` (строка, может быть пустой), **`email` (обязательный валидный email)**, опционально `address`, `agreement_number`, `target_date` (строка для `DATETIME`), опционально `manager_ext_id` — для роли **`Руководитель`** позволяет указать внешний id менеджера-владельца; для **`Менеджер`** владелец всегда `req.user.id`.
+    - SQL-транзакция: `INSERT INTO clients (...)`, затем `INSERT INTO orders (..., total_cost, current_stage) VALUES (..., 0.00, 'Новый')`, при пустом номере договора — `UPDATE` с `formatAutoAgreementNumber`, запись в `status_histories` через `StatusManager.appendHistory`.
+- **Ответ:** HTTP 201, `{ status: 'success', data: { id, client_id } }`.
 
 ## Критерии приемки (DoD)
 
